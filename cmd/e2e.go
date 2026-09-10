@@ -1,0 +1,185 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/jmoyonero/godev/pkg/config"
+	"github.com/jmoyonero/godev/pkg/execx"
+	"github.com/jmoyonero/godev/pkg/ui"
+	"github.com/spf13/cobra"
+)
+
+var (
+	e2eNoBrowser bool
+	e2eSuiteDir  string
+)
+
+var e2eCmd = &cobra.Command{
+	Use:     "e2e",
+	Aliases: []string{"robot"},
+	Short:   "Orquesta la suite de pruebas End-to-End con Robot Framework",
+	Long: `Prepara el entorno virtual de Python, compila e inicia los servicios en background,
+espera a sus healthchecks, ejecuta Robot Framework y abre el reporte en Google Chrome.
+Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
+		ui.Header("SUITE END-TO-END (ROBOT FRAMEWORK)")
+
+		// 1. Restaurar BBDD con seeds si existe configuración infra
+		if cfg.Infra.SeedsFile != "" && fileExists(cfg.Infra.SeedsFile) {
+			ui.Step("1. Restaurando base de datos con seeds...")
+			if err := infraResetDbCmd.RunE(cmd, nil); err != nil {
+				return fmt.Errorf("falló la restauración de BBDD previa a e2e: %w", err)
+			}
+		}
+
+		// 2. Setup de Python venv
+		venvDir := cfg.E2E.VenvDir
+		if venvDir == "" {
+			venvDir = "test/robot/.venv"
+		}
+
+		pipBin := filepath.Join(venvDir, "bin", "pip")
+		robotBin := filepath.Join(venvDir, "bin", "robot")
+
+		if !fileExists(robotBin) {
+			ui.Step("2. Creando entorno virtual Python en %s...", venvDir)
+			if err := execx.Run("python3", "-m", "venv", venvDir); err != nil {
+				return fmt.Errorf("error creando venv: %w", err)
+			}
+
+			ui.Step("   Instalando dependencias de Robot Framework...")
+			_ = execx.Run(pipBin, "install", "--upgrade", "pip")
+			reqFile := cfg.E2E.Requirements
+			if reqFile == "" {
+				reqFile = "test/robot/requirements.txt"
+			}
+			if fileExists(reqFile) {
+				if err := execx.Run(pipBin, "install", "-r", reqFile); err != nil {
+					return fmt.Errorf("error instalando requirements en venv: %w", err)
+				}
+			}
+		} else {
+			ui.Step("2. Entorno virtual Python verificado en %s.", venvDir)
+		}
+
+		// 3. Preparar contexto cancelable para procesos background
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			ui.Warn("\nInterrupción detectada. Limpiando procesos background...")
+			cancel()
+		}()
+
+		// 4. Liberar puertos y arrancar servicios definidos
+		tempBinaries := make([]string, 0)
+		defer func() {
+			for _, bin := range tempBinaries {
+				_ = os.Remove(bin)
+			}
+		}()
+
+		ui.Step("3. Compilando y levantando servicios en background...")
+		for _, svc := range cfg.E2E.Services {
+			if svc.Port > 0 {
+				execx.KillPort(svc.Port)
+			}
+
+			// Compilar a /tmp
+			binName := fmt.Sprintf("/tmp/godev-%s-%d", svc.Name, time.Now().UnixNano())
+			tempBinaries = append(tempBinaries, binName)
+
+			ui.Dim("Compilando %s desde %s -> %s", svc.Name, svc.Cmd, binName)
+			if err := execx.Run("go", "build", "-o", binName, svc.Cmd); err != nil {
+				return fmt.Errorf("falló la compilación del servicio %s: %w", svc.Name, err)
+			}
+
+			ui.Dim("Iniciando %s en background...", svc.Name)
+			bgCmd, err := execx.StartBackground(ctx, svc.Env, binName)
+			if err != nil {
+				return fmt.Errorf("error iniciando %s: %w", svc.Name, err)
+			}
+
+			// Asegurar que se mate el proceso cuando el contexto se cancele
+			go func(serviceName string, c *exec.Cmd) {
+				<-ctx.Done()
+				if c.Process != nil {
+					_ = c.Process.Kill()
+				}
+			}(svc.Name, bgCmd)
+
+			// Healthcheck
+			if svc.HealthURL != "" {
+				ui.Dim("Esperando healthcheck en %s...", svc.HealthURL)
+				if err := execx.WaitForURL(svc.HealthURL, 15*time.Second); err != nil {
+					return fmt.Errorf("servicio %s no respondió al healthcheck: %w", svc.Name, err)
+				}
+				ui.Dim("✅ %s listo.", svc.Name)
+			}
+		}
+
+		// 5. Ejecutar Robot Framework
+		resultsDir := cfg.E2E.ResultsDir
+		if resultsDir == "" {
+			resultsDir = "test/robot/results"
+		}
+		_ = os.MkdirAll(resultsDir, 0755)
+
+		suiteDir := e2eSuiteDir
+		if suiteDir == "" {
+			suiteDir = cfg.E2E.SuiteDir
+		}
+		if suiteDir == "" {
+			suiteDir = "test/robot"
+		}
+
+		robotArgs := []string{"-d", resultsDir}
+		for k, v := range cfg.E2E.Variables {
+			robotArgs = append(robotArgs, "--variable", fmt.Sprintf("%s:%s", k, v))
+		}
+		robotArgs = append(robotArgs, suiteDir)
+
+		ui.Step("4. 🚀 Ejecutando pruebas Robot Framework...")
+		robotErr := execx.Run(robotBin, robotArgs...)
+
+		// 6. Abrir reporte si procede
+		reportFile := filepath.Join(resultsDir, "report.html")
+		if fileExists(reportFile) && !e2eNoBrowser && cfg.E2E.OpenReport {
+			ui.Step("🌐 Abriendo reporte HTML en el navegador...")
+			execx.OpenBrowser(reportFile)
+		}
+
+		if robotErr != nil {
+			return fmt.Errorf("fallaron las pruebas E2E de Robot Framework")
+		}
+
+		ui.Success("Suite E2E completada exitosamente.")
+		return nil
+	},
+}
+
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
+}
+
+func init() {
+	e2eCmd.Flags().BoolVar(&e2eNoBrowser, "no-browser", false, "No abrir el reporte en el navegador al terminar")
+	e2eCmd.Flags().StringVar(&e2eSuiteDir, "suite", "", "Directorio específico de suites a ejecutar")
+	rootCmd.AddCommand(e2eCmd)
+}
