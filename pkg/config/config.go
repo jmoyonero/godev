@@ -61,12 +61,46 @@ type Config struct {
 	E2E   E2EConfig   `yaml:"e2e"`
 }
 
+func detectComposeFile() string {
+	candidates := []string{
+		"test/infra/docker-compose.yaml",
+		"test/infra/docker-compose.yml",
+		"infra/docker-compose.yaml",
+		"infra/docker-compose.yml",
+		"deployments/docker-compose.yaml",
+		"deployments/docker-compose.yml",
+		"docker-compose.yaml",
+		"docker-compose.yml",
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return "test/infra/docker-compose.yaml"
+}
+
+func detectSeedsFile() string {
+	candidates := []string{
+		"test/infra/seeds.sql",
+		"infra/seeds.sql",
+		"deployments/seeds.sql",
+		"seeds.sql",
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return "test/infra/seeds.sql"
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Name: "",
 		Infra: InfraConfig{
-			ComposeFile: "deployments/docker-compose.yaml",
-			SeedsFile:   "deployments/seeds.sql",
+			ComposeFile: detectComposeFile(),
+			SeedsFile:   detectSeedsFile(),
 			DbService:   "db",
 			DbUser:      "admin",
 			DbName:      "loaney_db",
@@ -102,12 +136,7 @@ func DefaultConfig() *Config {
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
-	// Detect if deployments/docker-compose.yaml exists, otherwise fallback to docker-compose.yaml
-	if _, err := os.Stat("deployments/docker-compose.yaml"); os.IsNotExist(err) {
-		if _, err := os.Stat("docker-compose.yaml"); err == nil {
-			cfg.Infra.ComposeFile = "docker-compose.yaml"
-		}
-	}
+	// Auto-detection handled by detectComposeFile() in DefaultConfig()
 
 	// Check for config file
 	candidates := []string{".godev.yaml", ".godev.yml"}
