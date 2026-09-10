@@ -18,15 +18,16 @@ type ServiceConfig struct {
 }
 
 type E2EConfig struct {
-	Enabled      bool            `yaml:"enabled"`
-	Type         string          `yaml:"type"` // e.g. "robot"
-	VenvDir      string          `yaml:"venv_dir"`
-	Requirements string          `yaml:"requirements"`
-	SuiteDir     string          `yaml:"suite_dir"`
-	ResultsDir   string          `yaml:"results_dir"`
-	OpenReport   bool            `yaml:"open_report"`
+	Enabled      bool              `yaml:"enabled"`
+	Type         string            `yaml:"type"` // e.g. "robot"
+	VenvDir      string            `yaml:"venv_dir"`
+	Requirements string            `yaml:"requirements"`
+	SuiteDir     string            `yaml:"suite_dir"`
+	ResultsDir   string            `yaml:"results_dir"`
+	OpenReport   bool              `yaml:"open_report"`
 	Variables    map[string]string `yaml:"variables"`
-	Services     []ServiceConfig `yaml:"services"`
+	Env          map[string]string `yaml:"env"` // Variables compartidas para todos los servicios
+	Services     []ServiceConfig   `yaml:"services"`
 }
 
 type LintConfig struct {
@@ -90,6 +91,7 @@ func DefaultConfig() *Config {
 			ResultsDir:   "test/robot/results",
 			OpenReport:   true,
 			Variables:    make(map[string]string),
+			Env:          make(map[string]string),
 			Services:     []ServiceConfig{},
 		},
 	}

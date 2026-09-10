@@ -18,6 +18,7 @@ import (
 
 var (
 	e2eNoBrowser bool
+	e2eStopInfra bool
 	e2eSuiteDir  string
 )
 
@@ -88,11 +89,29 @@ Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
 
 		// 4. Liberar puertos y arrancar servicios definidos
 		tempBinaries := make([]string, 0)
-		defer func() {
+		startedCmds := make([]*exec.Cmd, 0)
+
+		cleanupServices := func() {
+			cancel()
+			for _, bg := range startedCmds {
+				if bg != nil && bg.Process != nil {
+					_ = bg.Process.Kill()
+				}
+			}
+			for _, svc := range cfg.E2E.Services {
+				if svc.Port > 0 {
+					execx.KillPort(svc.Port)
+				}
+			}
 			for _, bin := range tempBinaries {
 				_ = os.Remove(bin)
 			}
-		}()
+			if e2eStopInfra {
+				downVolumes = true
+				_ = infraDownCmd.RunE(cmd, nil)
+			}
+		}
+		defer cleanupServices()
 
 		ui.Step("3. Compilando y levantando servicios en background...")
 		for _, svc := range cfg.E2E.Services {
@@ -109,25 +128,27 @@ Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
 				return fmt.Errorf("falló la compilación del servicio %s: %w", svc.Name, err)
 			}
 
+			// Combinar variables de entorno compartidas con las específicas del servicio
+			mergedEnv := make(map[string]string)
+			for k, v := range cfg.E2E.Env {
+				mergedEnv[k] = v
+			}
+			for k, v := range svc.Env {
+				mergedEnv[k] = v
+			}
+
 			ui.Dim("Iniciando %s en background...", svc.Name)
-			bgCmd, err := execx.StartBackground(ctx, svc.Env, binName)
+			bgCmd, err := execx.StartBackground(ctx, mergedEnv, binName)
 			if err != nil {
 				return fmt.Errorf("error iniciando %s: %w", svc.Name, err)
 			}
-
-			// Asegurar que se mate el proceso cuando el contexto se cancele
-			go func(serviceName string, c *exec.Cmd) {
-				<-ctx.Done()
-				if c.Process != nil {
-					_ = c.Process.Kill()
-				}
-			}(svc.Name, bgCmd)
+			startedCmds = append(startedCmds, bgCmd)
 
 			// Healthcheck
 			if svc.HealthURL != "" {
 				ui.Dim("Esperando healthcheck en %s...", svc.HealthURL)
 				if err := execx.WaitForURL(svc.HealthURL, 15*time.Second); err != nil {
-					return fmt.Errorf("servicio %s no respondió al healthcheck: %w", svc.Name, err)
+					return fmt.Errorf("servicio %s no respondió al healthcheck tras 15s: %w", svc.Name, err)
 				}
 				ui.Dim("✅ %s listo.", svc.Name)
 			}
@@ -180,6 +201,7 @@ func fileExists(p string) bool {
 
 func init() {
 	e2eCmd.Flags().BoolVar(&e2eNoBrowser, "no-browser", false, "No abrir el reporte en el navegador al terminar")
+	e2eCmd.Flags().BoolVar(&e2eStopInfra, "stop-infra", false, "Detiene y destruye contenedores (-v) al terminar")
 	e2eCmd.Flags().StringVar(&e2eSuiteDir, "suite", "", "Directorio específico de suites a ejecutar")
 	rootCmd.AddCommand(e2eCmd)
 }

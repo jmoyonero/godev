@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
@@ -22,7 +24,7 @@ var infraCmd = &cobra.Command{
 
 var infraUpCmd = &cobra.Command{
 	Use:   "up [servicios...]",
-	Short: "Levanta los contenedores en segundo plano",
+	Short: "Levanta los contenedores en segundo plano y espera a que estén listos",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -38,7 +40,6 @@ var infraUpCmd = &cobra.Command{
 		if len(args) > 0 {
 			cmdArgs = append(cmdArgs, args...)
 		} else {
-			// Si no se especifican servicios, levantamos db y wiremock por defecto si existen
 			cmdArgs = append(cmdArgs, "db", "wiremock")
 		}
 
@@ -47,7 +48,11 @@ var infraUpCmd = &cobra.Command{
 			return err
 		}
 
-		ui.Success("Contenedores iniciados exitosamente.")
+		// Esperar disponibilidad de BBDD si se levantó el servicio 'db'
+		ui.Dim("Comprobando disponibilidad de servicios...")
+		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
+
+		ui.Success("Contenedores iniciados y listos para su uso.")
 		return nil
 	},
 }
@@ -98,24 +103,11 @@ var infraResetDbCmd = &cobra.Command{
 
 		c := exec.Command("docker", "compose", "-f", cfg.Infra.ComposeFile, "exec", "-T", cfg.Infra.DbService,
 			"psql", "-U", cfg.Infra.DbUser, "-d", cfg.Infra.DbName)
-		c.Stdin = os.NewFile(0, "stdin") // or pipe buffer
-		stdin, err := c.StdinPipe()
-		if err != nil {
-			return err
-		}
+		c.Stdin = bytes.NewReader(seedsData)
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
 
-		if err := c.Start(); err != nil {
-			return err
-		}
-
-		if _, err := stdin.Write(seedsData); err != nil {
-			return err
-		}
-		_ = stdin.Close()
-
-		if err := c.Wait(); err != nil {
+		if err := c.Run(); err != nil {
 			return fmt.Errorf("error ejecutando seeds psql: %w", err)
 		}
 
@@ -134,6 +126,19 @@ var infraPsCmd = &cobra.Command{
 		}
 		return execx.Run("docker", "compose", "-f", cfg.Infra.ComposeFile, "ps")
 	},
+}
+
+func waitForPgReady(composeFile, dbService, dbUser, dbName string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("docker", "compose", "-f", composeFile, "exec", "-T", dbService,
+			"pg_isready", "-U", dbUser, "-d", dbName)
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout esperando disponibilidad de postgres")
 }
 
 func init() {
