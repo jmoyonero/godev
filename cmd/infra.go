@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/jmoyonero/godev/pkg/config"
@@ -47,7 +48,7 @@ var infraUpCmd = &cobra.Command{
 			return err
 		}
 
-		// Esperar disponibilidad de BBDD y WireMock si aplican
+		// Esperar disponibilidad de BBDD y servicios si aplican
 		ui.Dim("Comprobando disponibilidad de servicios...")
 		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
 		wiremockPort := cfg.Infra.WireMockPort
@@ -56,7 +57,59 @@ var infraUpCmd = &cobra.Command{
 		}
 		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
 
-		ui.Success("Contenedores iniciados y listos para su uso.")
+		servicesMap := make(map[string]bool)
+		for _, s := range cfg.Infra.Services {
+			servicesMap[strings.ToLower(s)] = true
+		}
+		if servicesMap["grafana"] {
+			servicesMap["prometheus"] = true
+		}
+		if servicesMap["prometheus"] {
+			servicesMap["otel-collector"] = true
+		}
+
+		promPort := cfg.Infra.PrometheusPort
+		if promPort == 0 {
+			promPort = 9090
+		}
+		if servicesMap["prometheus"] {
+			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/-/ready", promPort), 5*time.Second)
+		}
+
+		grafanaPort := cfg.Infra.GrafanaPort
+		if grafanaPort == 0 {
+			grafanaPort = 3000
+		}
+		if servicesMap["grafana"] {
+			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/api/health", grafanaPort), 5*time.Second)
+		}
+
+		dbPort := cfg.Infra.DbPort
+		if dbPort == 0 {
+			dbPort = 5432
+		}
+
+		ui.Success("Contenedores iniciados y listos para su uso:")
+		ui.Info("  🗄️  PostgreSQL:     localhost:%d (BBDD '%s')", dbPort, cfg.Infra.DbName)
+		if len(cfg.Infra.Services) == 0 || servicesMap["wiremock"] {
+			ui.Info("  🎭 WireMock:       http://localhost:%d", wiremockPort)
+		}
+		if len(cfg.Infra.Services) == 0 || servicesMap["jaeger"] || servicesMap["tracing"] {
+			ui.Info("  🔍 Jaeger:         http://localhost:16686")
+		}
+		if servicesMap["otel-collector"] || servicesMap["collector"] {
+			otelPort := cfg.Infra.OtelPort
+			if otelPort == 0 {
+				otelPort = 4317
+			}
+			ui.Info("  📡 OTel Collector: localhost:%d (OTLP gRPC)", otelPort)
+		}
+		if servicesMap["prometheus"] {
+			ui.Info("  📊 Prometheus:     http://localhost:%d", promPort)
+		}
+		if servicesMap["grafana"] {
+			ui.Info("  📈 Grafana:        http://localhost:%d", grafanaPort)
+		}
 		return nil
 	},
 }

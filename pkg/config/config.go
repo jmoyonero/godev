@@ -56,7 +56,10 @@ type InfraConfig struct {
 	DbUser       string   `yaml:"db_user,omitempty"`
 	DbPassword   string   `yaml:"db_password,omitempty"`
 	DbName       string   `yaml:"db_name,omitempty"`
-	DbPort       int      `yaml:"db_port,omitempty"`
+	DbPort           int      `yaml:"db_port,omitempty"`
+	PrometheusPort   int      `yaml:"prometheus_port,omitempty"`
+	GrafanaPort      int      `yaml:"grafana_port,omitempty"`
+	OtelPort         int      `yaml:"otel_port,omitempty"`
 }
 
 type Config struct {
@@ -133,7 +136,10 @@ func DefaultConfig() *Config {
 			DbUser:       "admin",
 			DbPassword:   "postgres",
 			DbName:       "loaney_db",
-			DbPort:       5432,
+			DbPort:         5432,
+			PrometheusPort: 9090,
+			GrafanaPort:    3000,
+			OtelPort:       4317,
 		},
 		Lint: LintConfig{
 			Version: "v1.64.8",
@@ -206,6 +212,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.Infra.DbPort == 0 {
 		cfg.Infra.DbPort = 5432
+	}
+	if cfg.Infra.PrometheusPort == 0 {
+		cfg.Infra.PrometheusPort = 9090
+	}
+	if cfg.Infra.GrafanaPort == 0 {
+		cfg.Infra.GrafanaPort = 3000
+	}
+	if cfg.Infra.OtelPort == 0 {
+		cfg.Infra.OtelPort = 4317
 	}
 	if cfg.Infra.WireMockPort == 0 {
 		cfg.Infra.WireMockPort = 8090

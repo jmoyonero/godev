@@ -96,6 +96,23 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 		servicesToEnable["jaeger"] = true
 	}
 
+	if servicesToEnable["grafana"] {
+		servicesToEnable["prometheus"] = true
+	}
+	if servicesToEnable["prometheus"] {
+		servicesToEnable["otel-collector"] = true
+	}
+
+	tmpDir := filepath.Join(os.TempDir(), "godev")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return "", err
+	}
+
+	projectTmpDir := filepath.Join(tmpDir, projectName)
+	if err := os.MkdirAll(projectTmpDir, 0755); err != nil {
+		return "", err
+	}
+
 	// 1. Database service (PostgreSQL 18)
 	if servicesToEnable["db"] || servicesToEnable["postgres"] || servicesToEnable["postgresql"] {
 		dbUser := cfg.Infra.DbUser
@@ -187,15 +204,172 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 		}
 	}
 
+	// 4. OpenTelemetry Collector
+	if servicesToEnable["otel-collector"] || servicesToEnable["collector"] {
+		otelPort := cfg.Infra.OtelPort
+		if otelPort == 0 {
+			otelPort = 4317
+		}
+
+		var otelConfig strings.Builder
+		otelConfig.WriteString(`receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  debug:
+    verbosity: basic
+`)
+		if servicesToEnable["jaeger"] || servicesToEnable["tracing"] {
+			otelConfig.WriteString(`  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+`)
+		}
+		otelConfig.WriteString(`
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
+`)
+		if servicesToEnable["jaeger"] || servicesToEnable["tracing"] {
+			otelConfig.WriteString(`    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]
+`)
+		}
+
+		otelConfigFile := filepath.Join(projectTmpDir, "otel-collector-config.yaml")
+		if err := os.WriteFile(otelConfigFile, []byte(otelConfig.String()), 0644); err != nil {
+			return "", fmt.Errorf("error escribiendo config otel-collector: %w", err)
+		}
+
+		compose.Services["otel-collector"] = ComposeService{
+			Image:         "otel/opentelemetry-collector-contrib:latest",
+			ContainerName: fmt.Sprintf("%s-otel-collector", projectName),
+			Restart:       "unless-stopped",
+			Command: []string{
+				"--config=/etc/otel-collector-config.yaml",
+			},
+			Ports: []string{
+				fmt.Sprintf("%d:4317", otelPort),
+				"8889:8889",
+			},
+			Volumes: []string{
+				fmt.Sprintf("%s:/etc/otel-collector-config.yaml", otelConfigFile),
+			},
+		}
+	}
+
+	// 5. Prometheus
+	if servicesToEnable["prometheus"] {
+		promPort := cfg.Infra.PrometheusPort
+		if promPort == 0 {
+			promPort = 9090
+		}
+
+		promConfig := `global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "otel-collector"
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["otel-collector:8889"]
+`
+		promConfigFile := filepath.Join(projectTmpDir, "prometheus.yml")
+		if err := os.WriteFile(promConfigFile, []byte(promConfig), 0644); err != nil {
+			return "", fmt.Errorf("error escribiendo config prometheus: %w", err)
+		}
+
+		compose.Services["prometheus"] = ComposeService{
+			Image:         "prom/prometheus:latest",
+			ContainerName: fmt.Sprintf("%s-prometheus", projectName),
+			Restart:       "unless-stopped",
+			Ports: []string{
+				fmt.Sprintf("%d:9090", promPort),
+			},
+			Volumes: []string{
+				fmt.Sprintf("%s:/etc/prometheus/prometheus.yml", promConfigFile),
+			},
+		}
+	}
+
+	// 6. Grafana
+	if servicesToEnable["grafana"] {
+		grafanaPort := cfg.Infra.GrafanaPort
+		if grafanaPort == 0 {
+			grafanaPort = 3000
+		}
+
+		grafanaProvDir := filepath.Join(projectTmpDir, "grafana", "provisioning", "datasources")
+		if err := os.MkdirAll(grafanaProvDir, 0755); err != nil {
+			return "", err
+		}
+
+		var datasources strings.Builder
+		datasources.WriteString(`apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 5s
+`)
+		if servicesToEnable["jaeger"] || servicesToEnable["tracing"] {
+			datasources.WriteString(`  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+`)
+		}
+
+		dsFile := filepath.Join(grafanaProvDir, "datasources.yaml")
+		if err := os.WriteFile(dsFile, []byte(datasources.String()), 0644); err != nil {
+			return "", fmt.Errorf("error escribiendo datasources de grafana: %w", err)
+		}
+
+		compose.Services["grafana"] = ComposeService{
+			Image:         "grafana/grafana:latest",
+			ContainerName: fmt.Sprintf("%s-grafana", projectName),
+			Restart:       "unless-stopped",
+			Environment: map[string]string{
+				"GF_AUTH_ANONYMOUS_ENABLED":  "true",
+				"GF_AUTH_ANONYMOUS_ORG_ROLE": "Admin",
+				"GF_AUTH_DISABLE_LOGIN_FORM": "true",
+			},
+			Ports: []string{
+				fmt.Sprintf("%d:3000", grafanaPort),
+			},
+			Volumes: []string{
+				fmt.Sprintf("%s:/etc/grafana/provisioning/datasources", grafanaProvDir),
+			},
+		}
+	}
+
 	data, err := yaml.Marshal(compose)
 	if err != nil {
 		return "", fmt.Errorf("error serializando compose dinámico: %w", err)
 	}
 
-	tmpDir := filepath.Join(os.TempDir(), "godev")
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		return "", err
-	}
+
 
 	composePath := filepath.Join(tmpDir, fmt.Sprintf("docker-compose-%s.yaml", projectName))
 	if err := os.WriteFile(composePath, data, 0644); err != nil {
