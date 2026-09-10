@@ -45,11 +45,17 @@ type TestConfig struct {
 }
 
 type InfraConfig struct {
-	ComposeFile string `yaml:"compose_file"`
-	SeedsFile   string `yaml:"seeds_file"`
-	DbService   string `yaml:"db_service"`
-	DbUser      string `yaml:"db_user"`
-	DbName      string `yaml:"db_name"`
+	ComposeFile  string   `yaml:"compose_file,omitempty"`
+	ProjectName  string   `yaml:"project_name,omitempty"`
+	Services     []string `yaml:"services,omitempty"`
+	SeedsFile    string   `yaml:"seeds_file,omitempty"`
+	WireMockDir  string   `yaml:"wiremock_dir,omitempty"`
+	WireMockPort int      `yaml:"wiremock_port,omitempty"`
+	DbService    string   `yaml:"db_service,omitempty"`
+	DbUser       string   `yaml:"db_user,omitempty"`
+	DbPassword   string   `yaml:"db_password,omitempty"`
+	DbName       string   `yaml:"db_name,omitempty"`
+	DbPort       int      `yaml:"db_port,omitempty"`
 }
 
 type Config struct {
@@ -82,6 +88,7 @@ func detectComposeFile() string {
 
 func detectSeedsFile() string {
 	candidates := []string{
+		"test/seeds.sql",
 		"test/infra/seeds.sql",
 		"infra/seeds.sql",
 		"deployments/seeds.sql",
@@ -92,18 +99,40 @@ func detectSeedsFile() string {
 			return c
 		}
 	}
-	return "test/infra/seeds.sql"
+	return "test/seeds.sql"
+}
+
+func detectWireMockDir() string {
+	candidates := []string{
+		"test/wiremock",
+		"test/infra/wiremock",
+		"infra/wiremock",
+		"deployments/wiremock",
+		"wiremock",
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	return "test/wiremock"
 }
 
 func DefaultConfig() *Config {
 	return &Config{
 		Name: "",
 		Infra: InfraConfig{
-			ComposeFile: detectComposeFile(),
-			SeedsFile:   detectSeedsFile(),
-			DbService:   "db",
-			DbUser:      "admin",
-			DbName:      "loaney_db",
+			ComposeFile:  "",
+			ProjectName:  "",
+			Services:     []string{"db", "wiremock", "jaeger"},
+			SeedsFile:    detectSeedsFile(),
+			WireMockDir:  detectWireMockDir(),
+			WireMockPort: 8090,
+			DbService:    "db",
+			DbUser:       "admin",
+			DbPassword:   "postgres",
+			DbName:       "loaney_db",
+			DbPort:       5432,
 		},
 		Lint: LintConfig{
 			Version: "v1.64.8",
@@ -161,9 +190,32 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// Adjust paths if needed
-	if cfg.Infra.ComposeFile == "" {
-		cfg.Infra.ComposeFile = "deployments/docker-compose.yaml"
+	if cfg.Infra.DbService == "" {
+		cfg.Infra.DbService = "db"
+	}
+	if cfg.Infra.DbUser == "" {
+		cfg.Infra.DbUser = "admin"
+	}
+	if cfg.Infra.DbPassword == "" {
+		cfg.Infra.DbPassword = "postgres"
+	}
+	if cfg.Infra.DbName == "" {
+		cfg.Infra.DbName = "loaney_db"
+	}
+	if cfg.Infra.DbPort == 0 {
+		cfg.Infra.DbPort = 5432
+	}
+	if cfg.Infra.WireMockPort == 0 {
+		cfg.Infra.WireMockPort = 8090
+	}
+	if cfg.Infra.SeedsFile == "" {
+		cfg.Infra.SeedsFile = detectSeedsFile()
+	}
+	if cfg.Infra.WireMockDir == "" {
+		cfg.Infra.WireMockDir = detectWireMockDir()
+	}
+	if len(cfg.Infra.Services) == 0 {
+		cfg.Infra.Services = []string{"db", "wiremock", "jaeger"}
 	}
 
 	return cfg, nil

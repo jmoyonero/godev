@@ -9,6 +9,7 @@ import (
 
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
+	"github.com/jmoyonero/godev/pkg/infra"
 	"github.com/jmoyonero/godev/pkg/ui"
 	"github.com/spf13/cobra"
 )
@@ -31,19 +32,17 @@ var infraUpCmd = &cobra.Command{
 			return err
 		}
 
-		composeFile := cfg.Infra.ComposeFile
-		if _, err := os.Stat(composeFile); os.IsNotExist(err) {
-			return fmt.Errorf("no se encontró el archivo compose: %s", composeFile)
+		composeFile, err := infra.ResolveComposeFile(cfg)
+		if err != nil {
+			return fmt.Errorf("error resolviendo infraestructura: %w", err)
 		}
 
 		cmdArgs := []string{"compose", "-f", composeFile, "up", "-d"}
 		if len(args) > 0 {
 			cmdArgs = append(cmdArgs, args...)
-		} else {
-			cmdArgs = append(cmdArgs, "db", "wiremock")
 		}
 
-		ui.Step("🐳 Levantando contenedores con %s...", composeFile)
+		ui.Step("🐳 Levantando contenedores de infraestructura (%s)...", composeFile)
 		if err := execx.Run("docker", cmdArgs...); err != nil {
 			return err
 		}
@@ -51,7 +50,11 @@ var infraUpCmd = &cobra.Command{
 		// Esperar disponibilidad de BBDD y WireMock si aplican
 		ui.Dim("Comprobando disponibilidad de servicios...")
 		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
-		_ = execx.WaitForURL("http://127.0.0.1:8090/__admin", 5*time.Second)
+		wiremockPort := cfg.Infra.WireMockPort
+		if wiremockPort == 0 {
+			wiremockPort = 8090
+		}
+		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
 
 		ui.Success("Contenedores iniciados y listos para su uso.")
 		return nil
@@ -67,7 +70,11 @@ var infraDownCmd = &cobra.Command{
 			return err
 		}
 
-		composeFile := cfg.Infra.ComposeFile
+		composeFile, err := infra.ResolveComposeFile(cfg)
+		if err != nil {
+			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+		}
+
 		cmdArgs := []string{"compose", "-f", composeFile, "down"}
 		if downVolumes {
 			cmdArgs = append(cmdArgs, "-v")
@@ -89,7 +96,12 @@ var infraResetDbCmd = &cobra.Command{
 			return err
 		}
 
-		// 1. Asegurar que la infra esté levantada (db y dependencias como wiremock)
+		composeFile, err := infra.ResolveComposeFile(cfg)
+		if err != nil {
+			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+		}
+
+		// 1. Asegurar que la infra esté levantada
 		if err := infraUpCmd.RunE(cmd, nil); err != nil {
 			return err
 		}
@@ -102,7 +114,7 @@ var infraResetDbCmd = &cobra.Command{
 
 		ui.Step("🌱 Ejecutando seeds (%s) en servicio '%s' (BBDD '%s')...", seedsFile, cfg.Infra.DbService, cfg.Infra.DbName)
 
-		c := exec.Command("docker", "compose", "-f", cfg.Infra.ComposeFile, "exec", "-T", cfg.Infra.DbService,
+		c := exec.Command("docker", "compose", "-f", composeFile, "exec", "-T", cfg.Infra.DbService,
 			"psql", "-U", cfg.Infra.DbUser, "-d", cfg.Infra.DbName)
 		c.Stdin = bytes.NewReader(seedsData)
 		c.Stdout = os.Stdout
@@ -125,7 +137,13 @@ var infraPsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return execx.Run("docker", "compose", "-f", cfg.Infra.ComposeFile, "ps")
+
+		composeFile, err := infra.ResolveComposeFile(cfg)
+		if err != nil {
+			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+		}
+
+		return execx.Run("docker", "compose", "-f", composeFile, "ps")
 	},
 }
 
