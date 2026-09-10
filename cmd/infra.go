@@ -48,9 +48,10 @@ var infraUpCmd = &cobra.Command{
 			return err
 		}
 
-		// Esperar disponibilidad de BBDD si se levantó el servicio 'db'
+		// Esperar disponibilidad de BBDD y WireMock si aplican
 		ui.Dim("Comprobando disponibilidad de servicios...")
 		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
+		_ = execx.WaitForURL("http://127.0.0.1:8090/__admin", 5*time.Second)
 
 		ui.Success("Contenedores iniciados y listos para su uso.")
 		return nil
@@ -88,8 +89,8 @@ var infraResetDbCmd = &cobra.Command{
 			return err
 		}
 
-		// 1. Asegurar que la infra esté levantada
-		if err := infraUpCmd.RunE(cmd, []string{"db"}); err != nil {
+		// 1. Asegurar que la infra esté levantada (db y dependencias como wiremock)
+		if err := infraUpCmd.RunE(cmd, nil); err != nil {
 			return err
 		}
 
