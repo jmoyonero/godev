@@ -1,55 +1,96 @@
 # godev 🛠️
 
-Herramienta CLI unificada para desarrollo en Go y microservicios.
+[![Go Version](https://img.shields.io/badge/go-1.26+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Release](https://img.shields.io/github/v/release/jmoyonero/godev?color=brightgreen)](https://github.com/jmoyonero/godev/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/jmoyonero/godev/actions/workflows/ci.yml/badge.svg)](https://github.com/jmoyonero/godev/actions/workflows/ci.yml)
 
-Estandariza linters, análisis de seguridad SAST, comprobación de vulnerabilidades (CVEs), tests unitarios con detección de race conditions, gestión de infraestructura Docker y orquestación E2E con Robot Framework.
+> **Herramienta CLI unificada para desarrollo en Go y microservicios.**  
+> Estandariza la calidad de código, análisis de seguridad SAST, comprobación de vulnerabilidades (CVEs), tests unitarios con detección de condiciones de carrera, gestión de contenedores Docker y orquestación E2E completa con Robot Framework.
+
+---
+
+## 🎯 ¿Por qué `godev`?
+
+Cuando tienes múltiples microservicios en Go, copiar y mantener `Makefiles` o scripts de bash idénticos genera:
+- **Duplicación masiva:** Cambiar la versión de un linter o una regla de seguridad requiere editar 10 repositorios.
+- **Inconsistencias entre desarrolladores:** Comandos que funcionan en Linux o CI pero fallan en macOS con diferencias en `lsof`, `kill` o rutas de Python.
+- **Falta de estándares:** Cada microservicio termina teniendo flags y comandos diferentes.
+
+`godev` centraliza todo en un **único binario nativo en Go**, rápido, tipado y sin dependencias externas obligatorias. En tus microservicios ya no necesitas ningún `Makefile`.
+
+---
 
 ## 🚀 Instalación
 
+### Con `go install` (Recomendado)
 ```bash
 go install github.com/jmoyonero/godev@latest
 ```
 
+Asegúrate de tener `$GOPATH/bin` en tu `PATH`:
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+---
+
 ## 📋 Comandos Disponibles
 
-### Calidad y Seguridad
-- `godev lint`: Ejecuta `golangci-lint` (soporta `--fix` para correcciones automáticas).
-- `godev sec`: Ejecuta análisis de seguridad SAST con `gosec`.
-- `godev vulncheck`: Escanea vulnerabilidades conocidas en dependencias con `govulncheck`.
-- `godev test`: Ejecuta tests unitarios con `-race` y `-shuffle=on`.
-- `godev verify`: Ejecuta el pipeline completo de calidad (`lint` + `sec` + `vulncheck` + `test`).
+### 1. Calidad, Linters y Seguridad
 
-### Infraestructura Local
-- `godev infra up`: Levanta los contenedores en segundo plano.
-- `godev infra down [-v]`: Detiene los contenedores (y opcionalmente elimina volúmenes).
-- `godev infra reset-db`: Restablece la base de datos limpia ejecutando `seeds.sql`.
-- `godev infra ps`: Consulta el estado de los contenedores.
+| Comando | Descripción |
+| :--- | :--- |
+| `godev verify` | **Pipeline completo:** ejecuta en secuencia `lint` + `sec` + `vulncheck` + `test` y emite un informe consolidado con tiempos. |
+| `godev lint [--fix]` | Ejecuta `golangci-lint` con la versión fijada centralmente (soporta `--fix` para correcciones automáticas). |
+| `godev sec` | Ejecuta análisis estático de seguridad SAST con `gosec` (excluyendo automáticamente código generado o mocks). |
+| `godev vulncheck` | Escanea vulnerabilidades conocidas (CVEs) en las dependencias del proyecto con `govulncheck`. |
+| `godev test [--race] [--shuffle]` | Ejecuta tests unitarios en Go con flags configurables (`-race`, `-shuffle=on`). |
 
-### End-to-End (Robot Framework)
-- `godev e2e` (o `godev robot`):
-  - Verifica o crea automáticamente el entorno virtual de Python.
-  - Instala dependencias si faltan.
-  - Limpia puertos en uso.
-  - Compila y arranca servicios necesarios en segundo plano.
-  - Espera activamente a los healthchecks.
-  - Lanza Robot Framework.
-  - Abre el reporte HTML en Google Chrome.
-  - Limpia y apaga todos los procesos al finalizar o al cancelar (Ctrl+C).
+### 2. Infraestructura Local (Docker Compose)
 
-### Configuración
-- `godev init`: Genera una plantilla de configuración `.godev.yaml` en el proyecto actual.
+| Comando | Descripción |
+| :--- | :--- |
+| `godev infra up [servicios...]` | Levanta los contenedores en segundo plano y espera activamente a que los servicios estén `ready` (`pg_isready`). |
+| `godev infra down [-v]` | Detiene los contenedores (con `-v` para eliminar volúmenes y reiniciar estado efímero). |
+| `godev infra reset-db` | Aplica el script de datos semilla (`seeds.sql`) en la base de datos limpia. |
+| `godev infra ps` | Muestra el estado actual de los contenedores del proyecto. |
+
+### 3. End-to-End con Robot Framework
+
+| Comando | Descripción |
+| :--- | :--- |
+| `godev e2e` (o `godev robot`) | **Orquestador inteligente E2E:**<br>1. Restaura base de datos con seeds.<br>2. Crea y configura el virtualenv de Python (`.venv`) e instala `requirements.txt` si no existe.<br>3. Libera puertos en uso.<br>4. Compila y arranca en background los servicios necesarios con sus variables de entorno.<br>5. Espera con healthcheck polling activo.<br>6. Ejecuta Robot Framework.<br>7. Abre automáticamente el reporte HTML en Google Chrome.<br>8. Garantiza el apagado y limpieza de procesos y binarios al terminar o al recibir Ctrl+C. |
+
+Opciones adicionales:
+```bash
+godev e2e --no-browser    # No abre el reporte en el navegador
+godev e2e --stop-infra    # Destruye los contenedores (-v) al terminar
+godev e2e --suite ruta/   # Ejecuta una suite específica
+```
+
+### 4. Configuración y Utilidades
+
+| Comando | Descripción |
+| :--- | :--- |
+| `godev init [nombre]` | Genera una plantilla de configuración `.godev.yaml` en el directorio actual. |
+| `godev version` | Muestra la versión actual instalada de `godev`. |
+
+---
 
 ## ⚙️ Configuración (`.godev.yaml`)
 
-Si un microservicio necesita personalizar puertos, binarios o rutas:
+`godev` funciona sin configuración previa aplicando defaults inteligentes para Go. Si un microservicio necesita personalizar rutas, puertos o servicios en background, solo requiere un archivo `.godev.yaml`:
 
 ```yaml
-name: mi-servicio
-compose_file: deployments/docker-compose.yaml
-seeds_file: deployments/seeds.sql
-db_service: db
-db_user: admin
-db_name: mi_db
+name: loaney-api
+
+infra:
+  compose_file: deployments/docker-compose.yaml
+  seeds_file: deployments/seeds.sql
+  db_service: db
+  db_user: admin
+  db_name: loaney_db
 
 lint:
   version: "v1.64.8"
@@ -60,7 +101,7 @@ sec:
     - "internal/mocks"
 
 test:
-  path: "./..."
+  path: "./internal/..."
   race: true
   shuffle: "on"
 
@@ -74,12 +115,35 @@ e2e:
   open_report: true
   variables:
     API_BASE_URL: "http://127.0.0.1:8888"
+    SCHEDULER_BASE_URL: "http://127.0.0.1:8080"
+  env:
+    CLOUDSQL_CONNECTION_NAME: "127.0.0.1"
+    CLOUDSQL_CONNECTION_PORT: "5432"
+    CLOUDSQL_DB: "loaney_db"
+    CLOUDSQL_USER: "admin"
+    CLOUDSQL_PASSWORD: "secret_password"
+    LOANEY_API_PROVIDER_BASE_URL: "http://127.0.0.1:8090"
   services:
     - name: api
       cmd: ./cmd/api
       port: 8888
-      health_url: http://127.0.0.1:8888/health
+      health_url: "http://127.0.0.1:8888/health"
       env:
         PORT: "8888"
-        LOG_LEVEL: "info"
+    - name: scheduler
+      cmd: ./cmd/scheduler
+      port: 8080
+      health_url: "http://127.0.0.1:8080/healthz"
+      env:
+        PORT: "8080"
 ```
+
+---
+
+## 👨‍💻 Autor
+
+Creado y mantenido por **Jonathan Moyonero** ([@jmoyonero](https://github.com/jmoyonero)).
+
+## 📄 Licencia
+
+Distribuido bajo la Licencia MIT. Consulta [LICENSE](LICENSE) para más información.
