@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/jmoyonero/godev/pkg/docker"
 	"github.com/jmoyonero/godev/pkg/ui"
@@ -15,6 +17,8 @@ var (
 	dockerfileWrite bool
 	buildTarget     string
 	buildTag        string
+	sshKeyPath      string
+	noCache         bool
 )
 
 var dockerfileCmd = &cobra.Command{
@@ -62,9 +66,20 @@ var buildImageCmd = &cobra.Command{
 			"build",
 			"-f", "-",
 			"--target", buildTarget,
-			"-t", buildTag,
-			".",
+			"--build-arg", fmt.Sprintf("TARGET=%s", buildTarget),
 		}
+
+		if noCache {
+			buildArgs = append(buildArgs, "--no-cache")
+		}
+
+		keyB64, source := resolveSSHDeployKey(sshKeyPath)
+		if keyB64 != "" {
+			ui.Info("🔑 Credencial SSH detectada para repositorios privados (%s)", source)
+			buildArgs = append(buildArgs, "--build-arg", fmt.Sprintf("SSH_DEPLOY_KEY_B64=%s", keyB64))
+		}
+
+		buildArgs = append(buildArgs, "-t", buildTag, ".")
 
 		c := exec.Command("docker", buildArgs...)
 		c.Stdin = bytes.NewReader([]byte(content))
@@ -80,11 +95,44 @@ var buildImageCmd = &cobra.Command{
 	},
 }
 
+func resolveSSHDeployKey(explicitKeyPath string) (string, string) {
+	if explicitKeyPath != "" {
+		if data, err := os.ReadFile(explicitKeyPath); err == nil {
+			return base64.StdEncoding.EncodeToString(data), explicitKeyPath
+		}
+	}
+
+	if envB64 := os.Getenv("SSH_DEPLOY_KEY_B64"); envB64 != "" {
+		return envB64, "env:SSH_DEPLOY_KEY_B64"
+	}
+
+	if envKey := os.Getenv("SSH_DEPLOY_KEY"); envKey != "" {
+		return base64.StdEncoding.EncodeToString([]byte(envKey)), "env:SSH_DEPLOY_KEY"
+	}
+
+	home, err := os.UserHomeDir()
+	if err == nil {
+		candidates := []string{
+			filepath.Join(home, ".ssh", "id_ed25519"),
+			filepath.Join(home, ".ssh", "id_rsa"),
+		}
+		for _, candidate := range candidates {
+			if data, err := os.ReadFile(candidate); err == nil && len(data) > 0 {
+				return base64.StdEncoding.EncodeToString(data), candidate
+			}
+		}
+	}
+
+	return "", ""
+}
+
 func init() {
 	dockerfileCmd.Flags().BoolVarP(&dockerfileWrite, "write", "w", false, "Escribe el contenido en ./Dockerfile")
 
 	buildImageCmd.Flags().StringVarP(&buildTarget, "target", "t", "api", "Sabor o target a construir (ej. api, scheduler)")
 	buildImageCmd.Flags().StringVarP(&buildTag, "tag", "i", "", "Tag de la imagen resultante (ej. mi-app:latest)")
+	buildImageCmd.Flags().StringVar(&sshKeyPath, "ssh-key", "", "Ruta a la clave SSH privada para módulos privados (autodetecta ~/.ssh/id_ed25519)")
+	buildImageCmd.Flags().BoolVar(&noCache, "no-cache", false, "Fuerza la construcción sin usar la caché de Docker")
 
 	rootCmd.AddCommand(dockerfileCmd)
 	rootCmd.AddCommand(buildImageCmd)
