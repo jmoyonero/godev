@@ -39,9 +39,10 @@ type SecConfig struct {
 }
 
 type TestConfig struct {
-	Path    string `yaml:"path"`
-	Race    bool   `yaml:"race"`
-	Shuffle string `yaml:"shuffle"`
+	Path        string   `yaml:"path"`
+	ExcludeDirs []string `yaml:"exclude_dirs"`
+	Race        bool     `yaml:"race"`
+	Shuffle     string   `yaml:"shuffle"`
 }
 
 type InfraConfig struct {
@@ -141,9 +142,10 @@ func DefaultConfig() *Config {
 			ExcludeDirs: []string{"internal/oas", "internal/mocks"},
 		},
 		Test: TestConfig{
-			Path:    "./...",
-			Race:    true,
-			Shuffle: "on",
+			Path:        "./...",
+			ExcludeDirs: []string{},
+			Race:        true,
+			Shuffle:     "on",
 		},
 		E2E: E2EConfig{
 			Enabled:      true,

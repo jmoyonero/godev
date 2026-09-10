@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"os/exec"
+	"strings"
 
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
@@ -10,9 +14,10 @@ import (
 )
 
 var (
-	testRace    bool
-	testShuffle string
-	testPath    string
+	testRace        bool
+	testShuffle     string
+	testPath        string
+	testExcludeDirs []string
 )
 
 var testCmd = &cobra.Command{
@@ -46,7 +51,49 @@ var testCmd = &cobra.Command{
 			cmdArgs = append(cmdArgs, fmt.Sprintf("-shuffle=%s", shuffle))
 		}
 
-		cmdArgs = append(cmdArgs, path)
+		excludeDirs := testExcludeDirs
+		if len(excludeDirs) == 0 {
+			excludeDirs = cfg.Test.ExcludeDirs
+		}
+
+		var targets []string
+		if len(excludeDirs) > 0 {
+			// Resolve packages using go list and filter out excluded directories
+			out, err := exec.Command("go", "list", path).Output()
+			if err != nil {
+				return fmt.Errorf("error al listar paquetes con go list %s: %w", path, err)
+			}
+			scanner := bufio.NewScanner(bytes.NewReader(out))
+			for scanner.Scan() {
+				pkg := strings.TrimSpace(scanner.Text())
+				if pkg == "" {
+					continue
+				}
+				excluded := false
+				for _, ed := range excludeDirs {
+					cleaned := strings.Trim(ed, "/")
+					if strings.Contains(pkg, "/"+cleaned) || strings.HasSuffix(pkg, "/"+cleaned) || pkg == cleaned {
+						excluded = true
+						break
+					}
+				}
+				if !excluded {
+					targets = append(targets, pkg)
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				return fmt.Errorf("error al escanear paquetes: %w", err)
+			}
+		} else {
+			targets = []string{path}
+		}
+
+		if len(targets) == 0 {
+			ui.Step("ℹ️ No hay paquetes para testear tras aplicar los filtros de exclusión.")
+			return nil
+		}
+
+		cmdArgs = append(cmdArgs, targets...)
 
 		ui.Step("🧪 Ejecutando tests unitarios (%s)...", path)
 		if err := execx.Run("go", cmdArgs...); err != nil {
@@ -62,5 +109,6 @@ func init() {
 	testCmd.Flags().BoolVar(&testRace, "race", true, "Habilita el detector de condiciones de carrera (-race)")
 	testCmd.Flags().StringVar(&testShuffle, "shuffle", "on", "Orden aleatorio de tests (-shuffle=on)")
 	testCmd.Flags().StringVar(&testPath, "path", "", "Ruta específica de paquetes a testear (ej: ./internal/...)")
+	testCmd.Flags().StringSliceVar(&testExcludeDirs, "exclude-dir", nil, "Directorios o paquetes a excluir (ej: internal/integration)")
 	rootCmd.AddCommand(testCmd)
 }
