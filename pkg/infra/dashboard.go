@@ -51,7 +51,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "round(sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
+          "expr": "sum(last_over_time(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "Total Requests",
           "refId": "A"
@@ -95,7 +95,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "(sum(increase(http_client_request_duration_seconds_sum{exported_job=~\"$service\", http_route=~\"$route\"}[$__range])) / sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
+          "expr": "(sum(last_over_time(http_client_request_duration_seconds_sum{exported_job=~\"$service\", http_route=~\"$route\"}[$__range])) / sum(last_over_time(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
           "instant": true,
           "legendFormat": "Avg Latency",
           "refId": "A"
@@ -139,7 +139,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (increase(http_client_request_duration_seconds_bucket{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum by (le) (last_over_time(http_client_request_duration_seconds_bucket{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
           "instant": true,
           "legendFormat": "P95 Latency",
           "refId": "A"
@@ -183,7 +183,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "((sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", http_response_status_code=~\"[45]..\"}[$__range])) / sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) * 100) or vector(0)",
+          "expr": "((sum(last_over_time(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", http_response_status_code=~\"[45]..\"}[$__range])) / sum(last_over_time(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) * 100) or vector(0)",
           "instant": true,
           "legendFormat": "Error %",
           "refId": "A"
@@ -345,7 +345,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "round(sum by (http_response_status_code) (increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or sum by (http_response_status_code) (http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"})",
+          "expr": "sum by (http_response_status_code) (last_over_time(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))",
           "legendFormat": "HTTP {{http_response_status_code}}",
           "refId": "A"
         }
