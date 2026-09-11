@@ -406,3 +406,320 @@ const httpClientDashboardJSON = `{
   "uid": "http-client-telemetry",
   "version": 2
 }`
+
+const dbPoolDashboardJSON = `{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Connection Pool Status (Client / Pod)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "((sum(last_over_time(db_client_connections_in_use{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__range])) / sum(last_over_time(db_client_connections_max{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__range]))) * 100) or vector(0)",
+          "instant": true,
+          "legendFormat": "Utilization",
+          "refId": "A"
+        }
+      ],
+      "title": "Pool Utilization %",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 6, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(db_client_connections_open{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__range])) or vector(0)",
+          "instant": true,
+          "legendFormat": "Open",
+          "refId": "A"
+        }
+      ],
+      "title": "Open Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 10, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(db_client_connections_in_use{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__range])) or vector(0)",
+          "instant": true,
+          "legendFormat": "In Use",
+          "refId": "A"
+        }
+      ],
+      "title": "In-Use Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 14, "y": 1 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(db_client_connections_idle{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__range])) or vector(0)",
+          "instant": true,
+          "legendFormat": "Idle",
+          "refId": "A"
+        }
+      ],
+      "title": "Idle Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(db_client_connections_max{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__range])) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max",
+          "refId": "A"
+        }
+      ],
+      "title": "Max Connections Limit",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum by (pool_name) (db_client_connections_in_use{exported_job=~\"$service\", pool_name=~\"$pool\"})",
+          "legendFormat": "In Use ({{pool_name}})",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum by (pool_name) (db_client_connections_idle{exported_job=~\"$service\", pool_name=~\"$pool\"})",
+          "legendFormat": "Idle ({{pool_name}})",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum by (pool_name) (db_client_connections_open{exported_job=~\"$service\", pool_name=~\"$pool\"})",
+          "legendFormat": "Total Open ({{pool_name}})",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum by (pool_name) (db_client_connections_max{exported_job=~\"$service\", pool_name=~\"$pool\"})",
+          "legendFormat": "Max Limit ({{pool_name}})",
+          "refId": "D"
+        }
+      ],
+      "title": "Connections Distribution Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum by (pool_name) (rate(db_client_connections_wait_count_total{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__rate_interval]))",
+          "legendFormat": "Wait Count Rate (waits/s)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "editorMode": "code",
+          "expr": "sum by (pool_name) (rate(db_client_connections_wait_duration_seconds_total{exported_job=~\"$service\", pool_name=~\"$pool\"}[$__rate_interval]))",
+          "legendFormat": "Wait Duration Rate (s/s)",
+          "refId": "B"
+        }
+      ],
+      "title": "Connection Contention & Blocked Goroutines",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["godev", "database", "postgres", "pool", "telemetry"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "All", "value": ".*" },
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "definition": "label_values(db_client_connections_open, exported_job)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": false,
+        "name": "service",
+        "options": [],
+        "query": { "query": "label_values(db_client_connections_open, exported_job)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": { "selected": true, "text": "All", "value": ".*" },
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "definition": "label_values(db_client_connections_open{exported_job=~\"$service\"}, pool_name)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "pool",
+        "options": [],
+        "query": { "query": "label_values(db_client_connections_open{exported_job=~\"$service\"}, pool_name)", "refId": "StandardVariableQuery" },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"] },
+  "timezone": "browser",
+  "title": "Database Connection Pool",
+  "uid": "database-connection-pool",
+  "version": 1
+}`

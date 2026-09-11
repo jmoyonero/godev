@@ -376,6 +376,11 @@ providers:
 			return "", fmt.Errorf("error escribiendo dashboard json de grafana: %w", err)
 		}
 
+		dbDashJSONFile := filepath.Join(grafanaDashDir, "database-connection-pool.json")
+		if err := os.WriteFile(dbDashJSONFile, []byte(dbPoolDashboardJSON), 0644); err != nil {
+			return "", fmt.Errorf("error escribiendo dashboard db json de grafana: %w", err)
+		}
+
 		compose.Services["grafana"] = ComposeService{
 			Image:         "grafana/grafana:latest",
 			ContainerName: fmt.Sprintf("%s-grafana", projectName),
