@@ -56,7 +56,20 @@ export PATH="$HOME/go/bin:$PATH"
 | `godev infra reset-db` | Aplica el script de datos semilla (`seeds.sql`) en la base de datos limpia. |
 | `godev infra ps` | Muestra el estado actual de los contenedores del proyecto. |
 
-### 3. End-to-End con Robot Framework
+### 3. Desarrollo y Ejecución de Servicios (`godev run`)
+
+| Comando | Descripción |
+| :--- | :--- |
+| `godev run [servicios...]`<br>*(alias: `start`, `dev`)* | **Ejecutor concurrente en desarrollo:**<br>1. Compila concurrentemente los servicios declarados en `e2e.services` de `.godev.yaml` (o los indicados por argumento, ej: `godev run api`).<br>2. Libera puertos ocupados automáticamente.<br>3. Inyecta variables de entorno combinadas (`e2e.env` + `svc.env`).<br>4. Canaliza los logs de cada servicio con prefijos coloreados y alineados.<br>5. Espera activamente a que los healthchecks respondan OK.<br>6. Detiene limpiamente los procesos al pulsar `Ctrl+C`. |
+
+Opciones:
+```bash
+godev run             # Compila y arranca todos los servicios
+godev run api         # Arranca únicamente el servicio 'api'
+godev run --reset-db  # Aplica seeds.sql en la base de datos antes de arrancar
+```
+
+### 4. End-to-End con Robot Framework
 
 | Comando | Descripción |
 | :--- | :--- |
@@ -69,7 +82,7 @@ godev e2e --stop-infra    # Destruye los contenedores (-v) al terminar
 godev e2e --suite ruta/   # Ejecuta una suite específica
 ```
 
-### 4. Configuración y Utilidades
+### 5. Configuración y Utilidades
 
 | Comando | Descripción |
 | :--- | :--- |
