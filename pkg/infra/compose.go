@@ -316,8 +316,13 @@ scrape_configs:
 			grafanaPort = 3000
 		}
 
-		grafanaProvDir := filepath.Join(projectTmpDir, "grafana", "provisioning", "datasources")
-		if err := os.MkdirAll(grafanaProvDir, 0755); err != nil {
+		grafanaBaseProvDir := filepath.Join(projectTmpDir, "grafana", "provisioning")
+		grafanaDsDir := filepath.Join(grafanaBaseProvDir, "datasources")
+		grafanaDashDir := filepath.Join(grafanaBaseProvDir, "dashboards")
+		if err := os.MkdirAll(grafanaDsDir, 0755); err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(grafanaDashDir, 0755); err != nil {
 			return "", err
 		}
 
@@ -327,6 +332,7 @@ scrape_configs:
 datasources:
   - name: Prometheus
     type: prometheus
+    uid: PBFA97CFB590B2093
     access: proxy
     url: http://prometheus:9090
     isDefault: true
@@ -336,14 +342,38 @@ datasources:
 		if servicesToEnable["jaeger"] || servicesToEnable["tracing"] {
 			datasources.WriteString(`  - name: Jaeger
     type: jaeger
+    uid: PC9A941E8F2E49454
     access: proxy
     url: http://jaeger:16686
 `)
 		}
 
-		dsFile := filepath.Join(grafanaProvDir, "datasources.yaml")
+		dsFile := filepath.Join(grafanaDsDir, "datasources.yaml")
 		if err := os.WriteFile(dsFile, []byte(datasources.String()), 0644); err != nil {
 			return "", fmt.Errorf("error escribiendo datasources de grafana: %w", err)
+		}
+
+		dashboardsYaml := `apiVersion: 1
+
+providers:
+  - name: 'default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+`
+		dashConfigFile := filepath.Join(grafanaDashDir, "dashboards.yaml")
+		if err := os.WriteFile(dashConfigFile, []byte(dashboardsYaml), 0644); err != nil {
+			return "", fmt.Errorf("error escribiendo dashboards.yaml de grafana: %w", err)
+		}
+
+		dashJSONFile := filepath.Join(grafanaDashDir, "http-client-telemetry.json")
+		if err := os.WriteFile(dashJSONFile, []byte(httpClientDashboardJSON), 0644); err != nil {
+			return "", fmt.Errorf("error escribiendo dashboard json de grafana: %w", err)
 		}
 
 		compose.Services["grafana"] = ComposeService{
@@ -359,7 +389,7 @@ datasources:
 				fmt.Sprintf("%d:3000", grafanaPort),
 			},
 			Volumes: []string{
-				fmt.Sprintf("%s:/etc/grafana/provisioning/datasources", grafanaProvDir),
+				fmt.Sprintf("%s:/etc/grafana/provisioning", grafanaBaseProvDir),
 			},
 		}
 	}
