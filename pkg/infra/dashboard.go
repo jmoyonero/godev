@@ -15,7 +15,7 @@ const httpClientDashboardJSON = `{
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 100,
-      "title": "Overview & KPIs",
+      "title": "Overview & KPIs (Selected Range)",
       "type": "row"
     },
     {
@@ -51,10 +51,9 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", otel_scope_name=~\".*httpclient\"}) or vector(0)",
-          "instant": false,
+          "expr": "round(sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
+          "instant": true,
           "legendFormat": "Total Requests",
-          "range": true,
           "refId": "A"
         }
       ],
@@ -87,7 +86,7 @@ const httpClientDashboardJSON = `{
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         }
@@ -96,10 +95,9 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "(sum(rate(http_client_request_duration_seconds_sum{exported_job=~\"$service\", http_route=~\"$route\"}[1m])) / sum(rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[1m]))) or vector(0)",
-          "instant": false,
+          "expr": "(sum(increase(http_client_request_duration_seconds_sum{exported_job=~\"$service\", http_route=~\"$route\"}[$__range])) / sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
+          "instant": true,
           "legendFormat": "Avg Latency",
-          "range": true,
           "refId": "A"
         }
       ],
@@ -132,7 +130,7 @@ const httpClientDashboardJSON = `{
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         }
@@ -141,10 +139,9 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_client_request_duration_seconds_bucket{exported_job=~\"$service\", http_route=~\"$route\"}[1m]))) or vector(0)",
-          "instant": false,
+          "expr": "histogram_quantile(0.95, sum by (le) (increase(http_client_request_duration_seconds_bucket{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or vector(0)",
+          "instant": true,
           "legendFormat": "P95 Latency",
-          "range": true,
           "refId": "A"
         }
       ],
@@ -177,7 +174,7 @@ const httpClientDashboardJSON = `{
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         }
@@ -186,10 +183,9 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "((sum(rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", http_response_status_code=~\"[45]..\"}[1m])) / sum(rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[1m]))) * 100) or vector(0)",
-          "instant": false,
+          "expr": "((sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", http_response_status_code=~\"[45]..\"}[$__range])) / sum(increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) * 100) or vector(0)",
+          "instant": true,
           "legendFormat": "Error %",
-          "range": true,
           "refId": "A"
         }
       ],
@@ -233,7 +229,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum by (http_request_method, http_route) (rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[1m]))",
+          "expr": "sum by (http_request_method, http_route) (rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__rate_interval]))",
           "legendFormat": "{{http_request_method}} {{http_route}}",
           "refId": "A"
         }
@@ -271,7 +267,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum by (http_route) (rate(http_client_request_duration_seconds_sum{exported_job=~\"$service\", http_route=~\"$route\"}[1m])) / sum by (http_route) (rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[1m]))",
+          "expr": "sum by (http_route) (rate(http_client_request_duration_seconds_sum{exported_job=~\"$service\", http_route=~\"$route\"}[$__rate_interval])) / sum by (http_route) (rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}",
           "refId": "A"
         }
@@ -316,7 +312,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum by (http_route, http_response_status_code) (rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", http_response_status_code=~\"[45]..\"}[1m]))",
+          "expr": "sum by (http_route, http_response_status_code) (rate(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\", http_response_status_code=~\"[45]..\"}[$__rate_interval]))",
           "legendFormat": "{{http_response_status_code}} {{http_route}}",
           "refId": "A"
         }
@@ -349,7 +345,7 @@ const httpClientDashboardJSON = `{
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum by (http_response_status_code) (http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"})",
+          "expr": "round(sum by (http_response_status_code) (increase(http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"}[$__range]))) or sum by (http_response_status_code) (http_client_request_duration_seconds_count{exported_job=~\"$service\", http_route=~\"$route\"})",
           "legendFormat": "HTTP {{http_response_status_code}}",
           "refId": "A"
         }
@@ -408,5 +404,5 @@ const httpClientDashboardJSON = `{
   "timezone": "browser",
   "title": "HTTP Client Telemetry",
   "uid": "http-client-telemetry",
-  "version": 1
+  "version": 2
 }`
