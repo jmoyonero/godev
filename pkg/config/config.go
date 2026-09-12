@@ -34,6 +34,12 @@ type LintConfig struct {
 	Version string `yaml:"version"`
 }
 
+// DefaultGolangciVersion is the golangci-lint version used when a project does
+// not pin one. It tracks the v2 line: v1 is unmaintained and cannot read the
+// export data of Go 1.27 or newer, where it fails every package's typecheck
+// instead of reporting findings.
+const DefaultGolangciVersion = "v2.13.2"
+
 type SecConfig struct {
 	ExcludeDirs []string `yaml:"exclude_dirs"`
 }
@@ -142,7 +148,7 @@ func DefaultConfig() *Config {
 			OtelPort:       4317,
 		},
 		Lint: LintConfig{
-			Version: "v1.64.8",
+			Version: DefaultGolangciVersion,
 		},
 		Sec: SecConfig{
 			ExcludeDirs: []string{"internal/oas", "internal/mocks"},
