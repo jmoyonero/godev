@@ -46,20 +46,20 @@ type TestConfig struct {
 }
 
 type InfraConfig struct {
-	ComposeFile  string   `yaml:"compose_file,omitempty"`
-	ProjectName  string   `yaml:"project_name,omitempty"`
-	Services     []string `yaml:"services,omitempty"`
-	SeedsFile    string   `yaml:"seeds_file,omitempty"`
-	WireMockDir  string   `yaml:"wiremock_dir,omitempty"`
-	WireMockPort int      `yaml:"wiremock_port,omitempty"`
-	DbService    string   `yaml:"db_service,omitempty"`
-	DbUser       string   `yaml:"db_user,omitempty"`
-	DbPassword   string   `yaml:"db_password,omitempty"`
-	DbName       string   `yaml:"db_name,omitempty"`
-	DbPort           int      `yaml:"db_port,omitempty"`
-	PrometheusPort   int      `yaml:"prometheus_port,omitempty"`
-	GrafanaPort      int      `yaml:"grafana_port,omitempty"`
-	OtelPort         int      `yaml:"otel_port,omitempty"`
+	ComposeFile    string   `yaml:"compose_file,omitempty"`
+	ProjectName    string   `yaml:"project_name,omitempty"`
+	Services       []string `yaml:"services,omitempty"`
+	SeedsFile      string   `yaml:"seeds_file,omitempty"`
+	WireMockDir    string   `yaml:"wiremock_dir,omitempty"`
+	WireMockPort   int      `yaml:"wiremock_port,omitempty"`
+	DbService      string   `yaml:"db_service,omitempty"`
+	DbUser         string   `yaml:"db_user,omitempty"`
+	DbPassword     string   `yaml:"db_password,omitempty"`
+	DbName         string   `yaml:"db_name,omitempty"`
+	DbPort         int      `yaml:"db_port,omitempty"`
+	PrometheusPort int      `yaml:"prometheus_port,omitempty"`
+	GrafanaPort    int      `yaml:"grafana_port,omitempty"`
+	OtelPort       int      `yaml:"otel_port,omitempty"`
 }
 
 type Config struct {
@@ -126,16 +126,16 @@ func DefaultConfig() *Config {
 	return &Config{
 		Name: "",
 		Infra: InfraConfig{
-			ComposeFile:  "",
-			ProjectName:  "",
-			Services:     []string{"db", "wiremock", "jaeger"},
-			SeedsFile:    detectSeedsFile(),
-			WireMockDir:  detectWireMockDir(),
-			WireMockPort: 8090,
-			DbService:    "db",
-			DbUser:       "admin",
-			DbPassword:   "postgres",
-			DbName:       "loaney_db",
+			ComposeFile:    "",
+			ProjectName:    "",
+			Services:       []string{"db", "wiremock", "jaeger"},
+			SeedsFile:      detectSeedsFile(),
+			WireMockDir:    detectWireMockDir(),
+			WireMockPort:   8090,
+			DbService:      "db",
+			DbUser:         "admin",
+			DbPassword:     "postgres",
+			DbName:         "loaney_db",
 			DbPort:         5432,
 			PrometheusPort: 9090,
 			GrafanaPort:    3000,
