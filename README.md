@@ -106,7 +106,7 @@ infra:
   db_name: loaney_db
 
 lint:
-  version: "v1.64.8"
+  version: "v2.13.2"
 
 sec:
   exclude_dirs:
