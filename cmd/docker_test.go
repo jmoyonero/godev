@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/docker"
 )
 
@@ -25,7 +26,7 @@ func withoutSSHKeys(t *testing.T) string {
 func TestDockerfileCommand(t *testing.T) {
 	t.Run("prints the Dockerfile", func(t *testing.T) {
 		setup(t)
-		want, err := docker.GenerateUniversalDockerfile()
+		want, err := docker.GenerateUniversalDockerfile(docker.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +72,7 @@ func TestBuildImageCommand(t *testing.T) {
 		}
 		assertCommands(t, fake, "docker build -f - --target api --build-arg TARGET=api -t api:latest .")
 
-		want, _ := docker.GenerateUniversalDockerfile()
+		want, _ := docker.GenerateUniversalDockerfile(docker.Options{})
 		if got := string(fake.Calls()[0].Stdin); got != want {
 			t.Errorf("docker build stdin is not the generated Dockerfile:\n%s", got)
 		}
@@ -97,9 +98,10 @@ func TestBuildImageCommand(t *testing.T) {
 		assertCommands(t, fake, "docker build -f - --target scheduler --build-arg TARGET=scheduler -t scheduler:latest .")
 	})
 
-	t.Run("passes the SSH key as a base64 build arg", func(t *testing.T) {
+	t.Run("passes the SSH key as a base64 build arg for private modules", func(t *testing.T) {
 		fake := setup(t)
 		withoutSSHKeys(t)
+		writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
 		writeFile(t, "deploy_key", "PRIVATE KEY")
 
 		if _, err := execute(t, "build-image", "--ssh-key", "deploy_key"); err != nil {
@@ -108,6 +110,37 @@ func TestBuildImageCommand(t *testing.T) {
 		wantArg := "SSH_DEPLOY_KEY_B64=" + base64.StdEncoding.EncodeToString([]byte("PRIVATE KEY"))
 		if got := fake.Commands()[0]; !strings.Contains(got, "--build-arg "+wantArg+" ") {
 			t.Errorf("docker build is missing the SSH build arg: %s", got)
+		}
+		if got := string(fake.Calls()[0].Stdin); !strings.Contains(got, "ENV GOPRIVATE=github.com/acme/*") {
+			t.Errorf("the Dockerfile does not declare the private modules of go.mod:\n%s", got)
+		}
+	})
+
+	t.Run("the config overrides the private module prefix of go.mod", func(t *testing.T) {
+		fake := setup(t)
+		withoutSSHKeys(t)
+		writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
+		writeFile(t, config.DefaultConfigFile, "docker:\n  private_modules: gitlab.com/other\n")
+
+		if _, err := execute(t, "build-image"); err != nil {
+			t.Fatal(err)
+		}
+		if got := string(fake.Calls()[0].Stdin); !strings.Contains(got, "ENV GOPRIVATE=gitlab.com/other/*") {
+			t.Errorf("the configured private module prefix was ignored:\n%s", got)
+		}
+	})
+
+	t.Run("without private modules the key is not passed to docker", func(t *testing.T) {
+		fake := setup(t)
+		withoutSSHKeys(t)
+		writeFile(t, "go.mod", "module myapp\n\ngo 1.27\n")
+		writeFile(t, "deploy_key", "PRIVATE KEY")
+
+		if _, err := execute(t, "build-image", "--ssh-key", "deploy_key"); err != nil {
+			t.Fatal(err)
+		}
+		if got := fake.Commands()[0]; strings.Contains(got, "SSH_DEPLOY_KEY_B64") {
+			t.Errorf("docker build received an SSH key for a project without private modules: %s", got)
 		}
 	})
 

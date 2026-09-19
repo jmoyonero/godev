@@ -121,15 +121,15 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 	if servicesToEnable["db"] || servicesToEnable["postgres"] || servicesToEnable["postgresql"] {
 		dbUser := cfg.Infra.DbUser
 		if dbUser == "" {
-			dbUser = "admin"
+			dbUser = config.DefaultDbUser
 		}
 		dbPassword := cfg.Infra.DbPassword
 		if dbPassword == "" {
-			dbPassword = "postgres"
+			dbPassword = config.DefaultDbPassword
 		}
 		dbName := cfg.Infra.DbName
 		if dbName == "" {
-			dbName = fmt.Sprintf("%s_db", projectName)
+			dbName = config.DbNameFor(projectName)
 		}
 		dbPort := cfg.Infra.DbPort
 		if dbPort == 0 {
@@ -146,7 +146,7 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 				"POSTGRES_USER":     dbUser,
 				"POSTGRES_PASSWORD": dbPassword,
 				"POSTGRES_DB":       dbName,
-				"TZ":                "Europe/Madrid",
+				"TZ":                "UTC",
 			},
 			Ports: []string{fmt.Sprintf("%d:5432", dbPort)},
 			Volumes: []string{

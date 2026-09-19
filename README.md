@@ -148,7 +148,7 @@ godev build-image --ssh-key ~/.ssh/deploy_key    # Key for private Go modules
 godev build-image --no-cache                     # Builds without cache
 ```
 
-For private modules, the SSH key is taken from `--ssh-key`, from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY` or from `~/.ssh/id_ed25519` / `~/.ssh/id_rsa`. It is only used during `go mod download` and never ends up in the image.
+**Private modules.** The generated Dockerfile only configures `GOPRIVATE` and SSH when the project has private modules. Their `host/owner` prefix is taken from `docker.private_modules` in `.godev.yaml`, or, when it is not set, from the module path in `go.mod` (`module github.com/acme/orders` → `github.com/acme`). In that case the SSH key comes from `--ssh-key`, from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY` or from `~/.ssh/id_ed25519` / `~/.ssh/id_rsa`. It is only used during `go mod download` and never ends up in the image.
 
 ### 4. Local Infrastructure (Docker Compose)
 
@@ -214,7 +214,7 @@ godev e2e --suite path/   # Runs a specific suite
 `godev` works with no prior configuration, applying sensible Go defaults. If a microservice needs to customize paths, ports or background services, it only needs a `.godev.yaml` (or `.godev.yml`) file. Every field is optional:
 
 ```yaml
-name: loaney-api
+name: orders-api
 
 infra:
   # compose_file: deployments/docker-compose.yaml  # Without it, one is generated on the fly
@@ -222,14 +222,20 @@ infra:
   seeds_file: test/seeds.sql
   wiremock_dir: test/wiremock
   db_service: db
-  db_user: admin
+  db_user: postgres
   db_password: postgres
-  db_name: loaney_db
+  db_name: orders_api_db     # Defaults to <name>_db, or app_db without a name
   db_port: 5432
   wiremock_port: 8090
   prometheus_port: 9090
   grafana_port: 3000
   otel_port: 4317
+
+docker:
+  # host/owner prefix of the private Go modules the image needs. Without it,
+  # the owner of the module in go.mod is used, and a project whose modules are
+  # all public gets a Dockerfile with no GOPRIVATE or SSH handling.
+  private_modules: github.com/acme
 
 lint:
   version: "v2.13.2"
@@ -260,12 +266,12 @@ e2e:
     API_BASE_URL: "http://127.0.0.1:8888"
     SCHEDULER_BASE_URL: "http://127.0.0.1:8080"
   env:
-    CLOUDSQL_CONNECTION_NAME: "127.0.0.1"
-    CLOUDSQL_CONNECTION_PORT: "5432"
-    CLOUDSQL_DB: "loaney_db"
-    CLOUDSQL_USER: "admin"
-    CLOUDSQL_PASSWORD: "postgres"
-    LOANEY_API_PROVIDER_BASE_URL: "http://127.0.0.1:8090"
+    DB_HOST: "127.0.0.1"
+    DB_PORT: "5432"
+    DB_NAME: "orders_api_db"
+    DB_USER: "postgres"
+    DB_PASSWORD: "postgres"
+    PROVIDER_BASE_URL: "http://127.0.0.1:8090"
   services:
     - name: api
       cmd: ./cmd/api
