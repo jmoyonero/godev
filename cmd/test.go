@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -47,13 +46,19 @@ var testCmd = &cobra.Command{
 
 		var cmdArgs []string
 
-		if testRace || cfg.Test.Race {
+		// Flags only override the config when set explicitly: their defaults
+		// would otherwise shadow test.race and test.shuffle from .godev.yaml.
+		race := cfg.Test.Race
+		if cmd.Flags().Changed("race") {
+			race = testRace
+		}
+		if race {
 			cmdArgs = append(cmdArgs, "-race")
 		}
 
-		shuffle := testShuffle
-		if shuffle == "" {
-			shuffle = cfg.Test.Shuffle
+		shuffle := cfg.Test.Shuffle
+		if cmd.Flags().Changed("shuffle") {
+			shuffle = testShuffle
 		}
 		if shuffle != "" && shuffle != "off" {
 			cmdArgs = append(cmdArgs, fmt.Sprintf("-shuffle=%s", shuffle))
@@ -67,7 +72,7 @@ var testCmd = &cobra.Command{
 		var targets []string
 		if len(excludeDirs) > 0 {
 			// Resolve packages using go list and filter out excluded directories
-			out, err := exec.Command("go", "list", path).Output()
+			out, err := execx.Output("go", "list", path)
 			if err != nil {
 				return fmt.Errorf("error listing packages with go list %s: %w", path, err)
 			}
@@ -127,7 +132,7 @@ var testCmd = &cobra.Command{
 			format = config.DefaultTestFormat
 		}
 
-		_, lookErr := exec.LookPath("gotestsum")
+		_, lookErr := execx.LookPath("gotestsum")
 		useGotestsum := !testPlain && lookErr == nil
 		if !testPlain && !useGotestsum {
 			ui.Dim("💡 Install gotestsum for colored output with a summary: %s", gotestsumInstallHint)
@@ -152,7 +157,7 @@ var testCmd = &cobra.Command{
 // reportCoverage prints the total coverage of profile and, when html is set,
 // opens the annotated source report in the browser.
 func reportCoverage(profile string, html bool) error {
-	out, err := exec.Command("go", "tool", "cover", "-func="+profile).Output()
+	out, err := execx.Output("go", "tool", "cover", "-func="+profile)
 	if err != nil {
 		return fmt.Errorf("could not read the coverage profile %s: %w", profile, err)
 	}
@@ -193,8 +198,8 @@ func testCommand(useGotestsum bool, format string, goArgs []string) (string, []s
 }
 
 func init() {
-	testCmd.Flags().BoolVar(&testRace, "race", true, "Enables the race detector (-race)")
-	testCmd.Flags().StringVar(&testShuffle, "shuffle", "on", "Random test order (-shuffle=on)")
+	testCmd.Flags().BoolVar(&testRace, "race", true, "Enables the race detector (-race); defaults to test.race")
+	testCmd.Flags().StringVar(&testShuffle, "shuffle", "on", "Random test order (-shuffle=on, off or a seed); defaults to test.shuffle")
 	testCmd.Flags().StringVar(&testPath, "path", "", "Specific package path to test (e.g. ./internal/...)")
 	testCmd.Flags().StringSliceVar(&testExcludeDirs, "exclude-dir", nil, "Directories or packages to exclude (e.g. internal/integration)")
 	testCmd.Flags().StringVar(&testFormat, "format", "", "gotestsum output format (testname, pkgname, dots, testdox, pkgname-and-test-fails...); defaults to test.format or testname")

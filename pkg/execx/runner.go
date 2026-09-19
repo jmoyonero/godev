@@ -1,7 +1,9 @@
 package execx
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,31 +11,159 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jmoyonero/godev/pkg/ui"
 )
 
+// Cmd describes a single process invocation.
+type Cmd struct {
+	Name string
+	Args []string
+	// Env holds variables added on top of the current environment.
+	Env map[string]string
+	// Stdin is fed to the process. When nil, a streamed command inherits the
+	// terminal's stdin.
+	Stdin []byte
+	// Quiet discards the process output instead of streaming it to the terminal.
+	// On failure the returned error includes what the process wrote to stderr.
+	Quiet bool
+}
+
+// String renders the command line, mainly for logs and test assertions.
+func (c Cmd) String() string {
+	return strings.Join(append([]string{c.Name}, c.Args...), " ")
+}
+
+// Runner executes external processes. Every command godev launches to
+// completion goes through the package-level runner, so tests can replace it
+// with SetRunner (see the execxtest package) instead of running real tools.
+type Runner interface {
+	// Run executes c to completion, streaming its output unless c.Quiet is set.
+	Run(c Cmd) error
+	// Output executes c and returns its stdout. Stderr is folded into the error.
+	Output(c Cmd) ([]byte, error)
+	// LookPath reports where an executable is installed, like exec.LookPath.
+	LookPath(name string) (string, error)
+}
+
+var (
+	runnerMu sync.RWMutex
+	runner   Runner = OSRunner{}
+)
+
+func current() Runner {
+	runnerMu.RLock()
+	defer runnerMu.RUnlock()
+	return runner
+}
+
+// SetRunner replaces the package-level runner and returns a function that
+// restores the previous one. It is meant for tests.
+func SetRunner(r Runner) (restore func()) {
+	runnerMu.Lock()
+	defer runnerMu.Unlock()
+	prev := runner
+	runner = r
+	return func() {
+		runnerMu.Lock()
+		defer runnerMu.Unlock()
+		runner = prev
+	}
+}
+
 // Run executes a command streaming stdout/stderr to standard OS outputs
 func Run(name string, args ...string) error {
-	return RunWithEnv(nil, name, args...)
+	return current().Run(Cmd{Name: name, Args: args})
 }
 
 // RunWithEnv executes a command with additional environment variables
 func RunWithEnv(env map[string]string, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	return current().Run(Cmd{Name: name, Args: args, Env: env})
+}
 
-	if len(env) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+// RunWithInput executes a command feeding stdin to it and streaming its output.
+func RunWithInput(stdin []byte, name string, args ...string) error {
+	return current().Run(Cmd{Name: name, Args: args, Stdin: stdin})
+}
+
+// RunQuiet executes a command without printing its output. On failure the
+// error includes what the command wrote to stderr.
+func RunQuiet(name string, args ...string) error {
+	return current().Run(Cmd{Name: name, Args: args, Quiet: true})
+}
+
+// Output executes a command and returns its stdout.
+func Output(name string, args ...string) ([]byte, error) {
+	return current().Output(Cmd{Name: name, Args: args})
+}
+
+// LookPath reports where an executable is installed.
+func LookPath(name string) (string, error) {
+	return current().LookPath(name)
+}
+
+// OSRunner is the Runner that executes real processes.
+type OSRunner struct{}
+
+func (OSRunner) command(c Cmd) *exec.Cmd {
+	cmd := exec.Command(c.Name, c.Args...)
+	if len(c.Env) > 0 {
+		cmd.Env = mergeEnv(c.Env)
+	}
+	if c.Stdin != nil {
+		cmd.Stdin = bytes.NewReader(c.Stdin)
+	}
+	return cmd
+}
+
+// Run implements Runner.
+func (r OSRunner) Run(c Cmd) error {
+	cmd := r.command(c)
+	if c.Quiet {
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			if msg := strings.TrimSpace(stderr.String()); msg != "" {
+				return fmt.Errorf("%w: %s", err, msg)
+			}
+			return err
 		}
+		return nil
 	}
 
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if c.Stdin == nil {
+		cmd.Stdin = os.Stdin
+	}
 	return cmd.Run()
+}
+
+// Output implements Runner.
+func (r OSRunner) Output(c Cmd) ([]byte, error) {
+	out, err := r.command(c).Output()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if msg := strings.TrimSpace(string(exitErr.Stderr)); msg != "" {
+			return out, fmt.Errorf("%w: %s", err, msg)
+		}
+	}
+	return out, err
+}
+
+// LookPath implements Runner.
+func (OSRunner) LookPath(name string) (string, error) {
+	return exec.LookPath(name)
+}
+
+func mergeEnv(env map[string]string) []string {
+	merged := os.Environ()
+	for k, v := range env {
+		merged = append(merged, fmt.Sprintf("%s=%s", k, v))
+	}
+	return merged
 }
 
 // StartBackground starts a long-running process in background with custom env and context
@@ -43,10 +173,7 @@ func StartBackground(ctx context.Context, env map[string]string, name string, ar
 	cmd.Stderr = os.Stderr
 
 	if len(env) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
+		cmd.Env = mergeEnv(env)
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -91,9 +218,9 @@ func FreePort(port int) {
 // stopContainerOnPort stops any Docker container publishing the given host port and
 // reports whether it found (and stopped) at least one.
 func stopContainerOnPort(port int) bool {
-	out, err := exec.Command("docker", "ps",
+	out, err := Output("docker", "ps",
 		"--filter", fmt.Sprintf("publish=%d", port),
-		"--format", "{{.ID}}\t{{.Names}}").Output()
+		"--format", "{{.ID}}\t{{.Names}}")
 	if err != nil {
 		return false
 	}
@@ -107,7 +234,7 @@ func stopContainerOnPort(port int) bool {
 		}
 		id, name := fields[0], fields[1]
 		ui.Dim("Freeing port %d (stopping container '%s')...", port, name)
-		if err := exec.Command("docker", "stop", id).Run(); err == nil {
+		if err := RunQuiet("docker", "stop", id); err == nil {
 			stoppedAny = true
 		} else {
 			ui.Warn("Could not stop container '%s' holding port %d.", name, port)
@@ -119,7 +246,7 @@ func stopContainerOnPort(port int) bool {
 // killBareProcessOnPort is the fallback for ports held by a plain OS process rather than
 // a Docker container (e.g. a leftover binary from a previous "godev run"/"godev e2e").
 func killBareProcessOnPort(port int) {
-	out, err := exec.Command("lsof", "-ti", fmt.Sprintf("tcp:%d", port)).Output()
+	out, err := Output("lsof", "-ti", fmt.Sprintf("tcp:%d", port))
 	if err != nil || len(out) == 0 {
 		return
 	}
@@ -134,12 +261,12 @@ func killBareProcessOnPort(port int) {
 			continue
 		}
 		ui.Dim("Freeing port %d (killing PID %d)...", port, pid)
-		_ = exec.Command("kill", "-9", strconv.Itoa(pid)).Run()
+		_ = RunQuiet("kill", "-9", strconv.Itoa(pid))
 	}
 }
 
 func isContainerEngineProcess(pid int) bool {
-	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+	out, err := Output("ps", "-p", strconv.Itoa(pid), "-o", "comm=")
 	if err != nil {
 		return false
 	}
@@ -175,16 +302,14 @@ func WaitForURL(urlStr string, timeout time.Duration) error {
 
 // OpenBrowser opens a file or URL in the default browser (preferring Google Chrome on Mac)
 func OpenBrowser(target string) {
-	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", "-a", "Google Chrome", target)
-		if err := cmd.Run(); err != nil {
-			_ = exec.Command("open", target).Run()
+		if err := RunQuiet("open", "-a", "Google Chrome", target); err != nil {
+			_ = RunQuiet("open", target)
 		}
 	case "linux":
-		_ = exec.Command("xdg-open", target).Run()
+		_ = RunQuiet("xdg-open", target)
 	case "windows":
-		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", target).Run()
+		_ = RunQuiet("rundll32", "url.dll,FileProtocolHandler", target)
 	}
 }

@@ -61,6 +61,11 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 fmt ./...
 
 - Add or update tests for every behavior change. Prefer table-driven tests.
 - Code that reads the working directory should run from `t.TempDir()` with `t.Chdir`.
+- Never launch real tools from command tests. Every external process goes
+  through `pkg/execx`, so install the fake runner with `execxtest.Install(t)`
+  and assert on the recorded commands. In `cmd/`, the `execute` and `setup`
+  helpers in `helpers_test.go` run a command in a temporary project and reset
+  the flags afterwards.
 - The generated Dockerfile is checked against golden files in
   `pkg/docker/testdata/`. After an intended change, regenerate and review them:
 

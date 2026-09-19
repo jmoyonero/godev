@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/jmoyonero/godev/pkg/config"
 )
 
 func TestGolangciModule(t *testing.T) {
@@ -55,4 +57,70 @@ func TestSemverMajor(t *testing.T) {
 			t.Errorf("semverMajor(%q) = (%d, %t), want (%d, %t)", tc.version, major, ok, tc.wantMajor, tc.wantOK)
 		}
 	}
+}
+
+const golangciV2 = "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
+
+func TestLintCommand(t *testing.T) {
+	t.Run("runs the default golangci-lint version", func(t *testing.T) {
+		fake := setup(t)
+		if _, err := execute(t, "lint"); err != nil {
+			t.Fatal(err)
+		}
+		assertCommands(t, fake, "go run "+golangciV2+"@"+config.DefaultGolangciVersion+" run ./...")
+	})
+
+	t.Run("honors lint.version and --fix", func(t *testing.T) {
+		fake := setup(t)
+		writeFile(t, ".godev.yaml", "lint:\n  version: v2.1.0\n")
+		if _, err := execute(t, "lint", "--fix"); err != nil {
+			t.Fatal(err)
+		}
+		assertCommands(t, fake, "go run "+golangciV2+"@v2.1.0 run --fix ./...")
+	})
+
+	t.Run("reports a failed run", func(t *testing.T) {
+		fake := setup(t)
+		fake.Handler = respond(map[string]answer{"go run": {err: errFailed}})
+		_, err := execute(t, "lint")
+		assertErrorContains(t, err, "golangci-lint run failed")
+	})
+}
+
+func TestSecCommand(t *testing.T) {
+	t.Run("excludes the default generated directories", func(t *testing.T) {
+		fake := setup(t)
+		if _, err := execute(t, "sec"); err != nil {
+			t.Fatal(err)
+		}
+		assertCommands(t, fake, "go run github.com/securego/gosec/v2/cmd/gosec@latest -exclude-dir=internal/oas -exclude-dir=internal/mocks ./...")
+	})
+
+	t.Run("uses sec.exclude_dirs from the config", func(t *testing.T) {
+		fake := setup(t)
+		writeFile(t, ".godev.yaml", "sec:\n  exclude_dirs: [gen]\n")
+		if _, err := execute(t, "sec"); err != nil {
+			t.Fatal(err)
+		}
+		assertCommands(t, fake, "go run github.com/securego/gosec/v2/cmd/gosec@latest -exclude-dir=gen ./...")
+	})
+
+	t.Run("reports findings as an error", func(t *testing.T) {
+		fake := setup(t)
+		fake.Handler = respond(map[string]answer{"go run": {err: errFailed}})
+		_, err := execute(t, "sec")
+		assertErrorContains(t, err, "gosec found security issues")
+	})
+}
+
+func TestVulncheckCommand(t *testing.T) {
+	fake := setup(t)
+	if _, err := execute(t, "vulncheck"); err != nil {
+		t.Fatal(err)
+	}
+	assertCommands(t, fake, "go run golang.org/x/vuln/cmd/govulncheck@latest ./...")
+
+	fake.Handler = respond(map[string]answer{"go run": {err: errFailed}})
+	_, err := execute(t, "vulncheck")
+	assertErrorContains(t, err, "govulncheck found vulnerabilities")
 }

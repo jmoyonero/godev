@@ -1,8 +1,7 @@
 package infra
 
 import (
-	"os/exec"
-
+	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/ui"
 )
 
@@ -22,8 +21,7 @@ const ManagedProject = "godev"
 // broken Docker will surface loudly on the "up" that follows.
 func TearDownManagedStack() {
 	ui.Step("🧹 Destroying the previous local infrastructure (project '%s')...", ManagedProject)
-	cmd := exec.Command("docker", "compose", "-p", ManagedProject, "down", "-v", "--remove-orphans")
-	if err := cmd.Run(); err != nil {
+	if err := execx.RunQuiet("docker", "compose", "-p", ManagedProject, "down", "-v", "--remove-orphans"); err != nil {
 		ui.Dim("No previous infrastructure to destroy (or it was already down).")
 	}
 }

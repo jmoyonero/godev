@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -173,13 +171,8 @@ var infraResetDbCmd = &cobra.Command{
 
 		ui.Step("🌱 Running seeds (%s) on service '%s' (database '%s')...", seedsFile, cfg.Infra.DbService, cfg.Infra.DbName)
 
-		c := exec.Command("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject, "exec", "-T", cfg.Infra.DbService,
-			"psql", "-U", cfg.Infra.DbUser, "-d", cfg.Infra.DbName)
-		c.Stdin = bytes.NewReader(seedsData)
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-
-		if err := c.Run(); err != nil {
+		if err := execx.RunWithInput(seedsData, "docker", "compose", "-f", composeFile, "-p", infra.ManagedProject, "exec", "-T", cfg.Infra.DbService,
+			"psql", "-U", cfg.Infra.DbUser, "-d", cfg.Infra.DbName); err != nil {
 			return fmt.Errorf("error running psql seeds: %w", err)
 		}
 
@@ -209,9 +202,8 @@ var infraPsCmd = &cobra.Command{
 func waitForPgReady(composeFile, dbService, dbUser, dbName string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		cmd := exec.Command("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject,
-			"exec", "-T", dbService, "pg_isready", "-U", dbUser, "-d", dbName)
-		if err := cmd.Run(); err == nil {
+		if err := execx.RunQuiet("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject,
+			"exec", "-T", dbService, "pg_isready", "-U", dbUser, "-d", dbName); err == nil {
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)

@@ -19,7 +19,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Shows the godev version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(versionString())
+		fmt.Fprintln(cmd.OutOrStdout(), versionString())
 	},
 }
 

@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -55,7 +53,7 @@ and automatically scans every Go package to generate interface mocks with mockge
 
 func generateMocks() error {
 	// Get the module name
-	out, err := exec.Command("go", "list", "-m").Output()
+	out, err := execx.Output("go", "list", "-m")
 	if err != nil {
 		return fmt.Errorf("could not determine the Go module: %w", err)
 	}
@@ -66,7 +64,7 @@ func generateMocks() error {
 	_ = os.RemoveAll(mocksDir)
 
 	// List the project's packages
-	pkgOut, err := exec.Command("go", "list", "./...").Output()
+	pkgOut, err := execx.Output("go", "list", "./...")
 	if err != nil {
 		return fmt.Errorf("error listing Go packages: %w", err)
 	}
@@ -81,7 +79,7 @@ func generateMocks() error {
 		}
 
 		// Get the package's physical directory and name
-		dirOut, err := exec.Command("go", "list", "-f", "{{.Dir}}:::{{.Name}}", pkg).Output()
+		dirOut, err := execx.Output("go", "list", "-f", "{{.Dir}}:::{{.Name}}", pkg)
 		if err != nil {
 			continue
 		}
@@ -137,11 +135,8 @@ func generateMocks() error {
 				strings.Join(interfaces, ","),
 			}
 
-			cmd := exec.Command("go", mockgenArgs...)
-			var errBuf bytes.Buffer
-			cmd.Stderr = &errBuf
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("mockgen failed for %s: %s (%w)", destFile, errBuf.String(), err)
+			if err := execx.RunQuiet("go", mockgenArgs...); err != nil {
+				return fmt.Errorf("mockgen failed for %s: %w", destFile, err)
 			}
 
 			mockCount++
@@ -150,7 +145,7 @@ func generateMocks() error {
 
 	if mockCount > 0 {
 		ui.Dim("Formatting %d mock files with gofmt...", mockCount)
-		_ = exec.Command("gofmt", "-w", mocksDir).Run()
+		_ = execx.RunQuiet("gofmt", "-w", mocksDir)
 	}
 
 	return nil

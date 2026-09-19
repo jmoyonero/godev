@@ -11,11 +11,14 @@ Release notes with full commit lists are also published on the
 
 ### Added
 - Unit tests for `pkg/config` and `pkg/docker`, with golden files for the generated Dockerfile.
+- Unit tests for every command except `run` and `e2e`, backed by a fake process runner (`pkg/execx/execxtest`).
 - CI runs `golangci-lint` and `govulncheck`, and Build & Test on both Linux and macOS.
 - Dependabot for Go modules and GitHub Actions.
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates.
 
 ### Fixed
+- `godev test --race=false` and `test.race: false` now disable the race detector; before, the flag's default always turned it back on.
+- `test.shuffle` from `.godev.yaml` is honored; before, the `--shuffle` default always overrode it.
 - `godev test` no longer shadows the command arguments.
 
 ### Security
