@@ -1,6 +1,8 @@
 package execx_test
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +35,9 @@ func TestMain(m *testing.M) {
 		os.Exit(3)
 	case "fail-silent":
 		os.Exit(3)
+	case "block":
+		fmt.Println("started")
+		select {}
 	}
 	os.Exit(0)
 }
@@ -96,6 +101,72 @@ func TestOSRunner_RunStreamed(t *testing.T) {
 	}
 	if err := r.Run(helper("fail-silent", nil)); err == nil {
 		t.Error("Run(fail-silent) = nil, want an error")
+	}
+}
+
+func TestOSRunner_Start(t *testing.T) {
+	r := execx.OSRunner{}
+
+	t.Run("captures the output of a process that exits", func(t *testing.T) {
+		var out bytes.Buffer
+		c := helper("env", nil)
+		c.Stdout = &out
+		p, err := r.Start(context.Background(), c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Wait(); err != nil {
+			t.Fatalf("Wait() = %v", err)
+		}
+		if out.String() != "from-env" {
+			t.Errorf("stdout = %q, want the extra env var", out.String())
+		}
+	})
+
+	t.Run("canceling the context kills the process", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		p, err := r.Start(ctx, helper("block", nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancel()
+		if err := p.Wait(); err == nil {
+			t.Error("Wait() = nil for a killed process")
+		}
+	})
+
+	t.Run("Kill stops the process", func(t *testing.T) {
+		p, err := r.Start(context.Background(), helper("block", nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Kill(); err != nil {
+			t.Fatalf("Kill() = %v", err)
+		}
+		if err := p.Wait(); err == nil {
+			t.Error("Wait() = nil for a killed process")
+		}
+	})
+
+	t.Run("a missing binary fails to start", func(t *testing.T) {
+		if _, err := r.Start(context.Background(), execx.Cmd{Name: "godev-definitely-not-installed"}); err == nil {
+			t.Error("Start() of a missing binary = nil error")
+		}
+	})
+}
+
+func TestStartUsesTheRunner(t *testing.T) {
+	fake := execxtest.Install(t)
+	p, err := execx.Start(context.Background(), execx.Cmd{Name: "svc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.Commands(); !reflect.DeepEqual(got, []string{"svc"}) {
+		t.Errorf("commands = %q", got)
+	}
+	_ = p.Kill()
+	if !fake.Processes()[0].Killed() {
+		t.Error("Kill did not reach the fake process")
 	}
 }
 

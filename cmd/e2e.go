@@ -1,15 +1,14 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -39,18 +38,30 @@ When done it destroys containers and processes, even when canceled with Ctrl+C
 			return err
 		}
 
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
 		ui.Header("END-TO-END SUITE (ROBOT FRAMEWORK)")
 
 		// 1. Make sure the infrastructure (Postgres, etc.) is up and free of port
 		//    conflicts with any other project's on this machine, before building or
 		//    starting anything.
 		ui.Step("1. Bringing up the e2e infrastructure...")
-		if err := infraUpCmd.RunE(cmd, nil); err != nil {
+		composeFile, err := startInfra(cfg, nil)
+		// The infra only exists for this run: it is destroyed at the end, whether the
+		// tests pass or fail, so no containers are left behind eating resources.
+		if !e2eKeepInfra {
+			defer func() { _ = stopInfra(cfg, true) }()
+		}
+		if err != nil {
 			return fmt.Errorf("failed to bring up the infrastructure before e2e: %w", err)
 		}
 		if cfg.Infra.SeedsFile != "" && fileExists(cfg.Infra.SeedsFile) {
-			ui.Step("   Restoring the database with seeds...")
-			if err := infraResetDbCmd.RunE(cmd, nil); err != nil {
+			seeds, err := readSeeds(cfg)
+			if err != nil {
+				return err
+			}
+			if err := seedDatabase(cfg, composeFile, seeds); err != nil {
 				return fmt.Errorf("database restore before e2e failed: %w", err)
 			}
 		}
@@ -85,93 +96,27 @@ When done it destroys containers and processes, even when canceled with Ctrl+C
 			ui.Step("2. Python virtual environment verified in %s.", venvDir)
 		}
 
-		// 3. Prepare a cancellable context for background processes
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-sigChan
-			ui.Warn("\nInterrupt detected. Cleaning up background processes...")
-			cancel()
-		}()
-
-		// 4. Free ports and start the configured services
-		tempBinaries := make([]string, 0)
-		startedCmds := make([]*exec.Cmd, 0)
-
-		cleanupServices := func() {
-			cancel()
-			for _, bg := range startedCmds {
-				if bg != nil && bg.Process != nil {
-					_ = bg.Process.Kill()
-				}
-			}
-			for _, svc := range cfg.E2E.Services {
-				if svc.Port > 0 {
-					execx.FreePort(svc.Port)
-				}
-			}
-			for _, bin := range tempBinaries {
-				_ = os.Remove(bin)
-			}
-			// The infra only exists for this run: it is destroyed at the end, whether the
-			// tests pass or fail, so no containers are left behind eating resources.
-			if !e2eKeepInfra {
-				downVolumes = true
-				_ = infraDownCmd.RunE(cmd, nil)
-			}
-		}
-		defer cleanupServices()
-
+		// 3. Build and start the services in the background
 		ui.Step("3. Building and starting services in the background...")
-		for _, svc := range cfg.E2E.Services {
-			if svc.Port > 0 {
-				execx.FreePort(svc.Port)
-			}
+		services, err := buildServices(cfg, cfg.E2E.Services)
+		if err != nil {
+			return err
+		}
+		defer services.stop()
 
-			// Build into /tmp
-			binName := fmt.Sprintf("/tmp/godev-%s-%d", svc.Name, time.Now().UnixNano())
-			tempBinaries = append(tempBinaries, binName)
-
-			ui.Dim("Building %s from %s -> %s", svc.Name, svc.Cmd, binName)
-			if err := execx.Run("go", "build", "-o", binName, svc.Cmd); err != nil {
-				return fmt.Errorf("build of service %s failed: %w", svc.Name, err)
-			}
-
-			// Merge the shared environment variables with the service-specific ones
-			mergedEnv := make(map[string]string)
-			for k, v := range cfg.E2E.Env {
-				mergedEnv[k] = v
-			}
-			for k, v := range svc.Env {
-				mergedEnv[k] = v
-			}
-
-			ui.Dim("Starting %s in the background...", svc.Name)
-			bgCmd, err := execx.StartBackground(ctx, mergedEnv, binName)
-			if err != nil {
-				return fmt.Errorf("error starting %s: %w", svc.Name, err)
-			}
-			startedCmds = append(startedCmds, bgCmd)
-
-			// Healthcheck
-			if svc.HealthURL != "" {
-				ui.Dim("Waiting for healthcheck at %s...", svc.HealthURL)
-				if err := execx.WaitForURL(svc.HealthURL, 15*time.Second); err != nil {
-					return fmt.Errorf("service %s did not respond to the healthcheck after 15s: %w", svc.Name, err)
-				}
-				ui.Dim("✅ %s ready.", svc.Name)
-			}
+		if err := services.start(ctx, nil); err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return errors.New("e2e run interrupted")
 		}
 
-		// 5. Run Robot Framework
+		// 4. Run Robot Framework
 		resultsDir := cfg.E2E.ResultsDir
 		if resultsDir == "" {
 			resultsDir = "test/robot/results"
 		}
-		_ = os.MkdirAll(resultsDir, 0755)
+		_ = os.MkdirAll(resultsDir, 0o750)
 
 		suiteDir := e2eSuiteDir
 		if suiteDir == "" {
@@ -182,15 +127,15 @@ When done it destroys containers and processes, even when canceled with Ctrl+C
 		}
 
 		robotArgs := []string{"-d", resultsDir}
-		for k, v := range cfg.E2E.Variables {
-			robotArgs = append(robotArgs, "--variable", fmt.Sprintf("%s:%s", k, v))
+		for _, k := range slices.Sorted(maps.Keys(cfg.E2E.Variables)) {
+			robotArgs = append(robotArgs, "--variable", fmt.Sprintf("%s:%s", k, cfg.E2E.Variables[k]))
 		}
 		robotArgs = append(robotArgs, suiteDir)
 
 		ui.Step("4. 🚀 Running Robot Framework tests...")
 		robotErr := execx.Run(robotBin, robotArgs...)
 
-		// 6. Open the report if applicable
+		// 5. Open the report if applicable
 		reportFile := filepath.Join(resultsDir, "report.html")
 		if fileExists(reportFile) && !e2eNoBrowser && cfg.E2E.OpenReport {
 			ui.Step("🌐 Opening the HTML report in the browser...")

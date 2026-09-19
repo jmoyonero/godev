@@ -17,6 +17,12 @@ const composePrefix = "docker compose -f docker-compose.yaml -p godev "
 // readiness timeout.
 func infraProject(t *testing.T) *execxtest.Fake {
 	t.Helper()
+	return infraProjectWith(t, "")
+}
+
+// infraProjectWith is infraProject with extra .godev.yaml content appended.
+func infraProjectWith(t *testing.T, extraConfig string) *execxtest.Fake {
+	t.Helper()
 	fake := setup(t)
 	writeFile(t, "docker-compose.yaml", "services: {}\n")
 
@@ -26,7 +32,7 @@ func infraProject(t *testing.T) *execxtest.Fake {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, ".godev.yaml", fmt.Sprintf("infra:\n  wiremock_port: %s\n", u.Port()))
+	writeFile(t, ".godev.yaml", fmt.Sprintf("infra:\n  wiremock_port: %s\n", u.Port())+extraConfig)
 	return fake
 }
 

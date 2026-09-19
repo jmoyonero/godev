@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -29,6 +30,10 @@ type Cmd struct {
 	// Quiet discards the process output instead of streaming it to the terminal.
 	// On failure the returned error includes what the process wrote to stderr.
 	Quiet bool
+	// Stdout and Stderr receive the output of a streamed or started command.
+	// When nil, it goes to the terminal.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // String renders the command line, mainly for logs and test assertions.
@@ -36,9 +41,17 @@ func (c Cmd) String() string {
 	return strings.Join(append([]string{c.Name}, c.Args...), " ")
 }
 
-// Runner executes external processes. Every command godev launches to
-// completion goes through the package-level runner, so tests can replace it
-// with SetRunner (see the execxtest package) instead of running real tools.
+// Process is a command started in the background.
+type Process interface {
+	// Wait blocks until the process exits and returns its exit error.
+	Wait() error
+	// Kill stops the process immediately.
+	Kill() error
+}
+
+// Runner executes external processes. Every command godev launches goes
+// through the package-level runner, so tests can replace it with SetRunner
+// (see the execxtest package) instead of running real tools.
 type Runner interface {
 	// Run executes c to completion, streaming its output unless c.Quiet is set.
 	Run(c Cmd) error
@@ -46,6 +59,9 @@ type Runner interface {
 	Output(c Cmd) ([]byte, error)
 	// LookPath reports where an executable is installed, like exec.LookPath.
 	LookPath(name string) (string, error)
+	// Start launches c in the background. The process is killed when ctx is
+	// done.
+	Start(ctx context.Context, c Cmd) (Process, error)
 }
 
 var (
@@ -133,12 +149,40 @@ func (r OSRunner) Run(c Cmd) error {
 		return nil
 	}
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout, cmd.Stderr = outputs(c)
 	if c.Stdin == nil {
 		cmd.Stdin = os.Stdin
 	}
 	return cmd.Run()
+}
+
+// Start implements Runner.
+func (OSRunner) Start(ctx context.Context, c Cmd) (Process, error) {
+	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
+	if len(c.Env) > 0 {
+		cmd.Env = mergeEnv(c.Env)
+	}
+	cmd.Stdout, cmd.Stderr = outputs(c)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return osProcess{cmd}, nil
+}
+
+type osProcess struct{ cmd *exec.Cmd }
+
+func (p osProcess) Wait() error { return p.cmd.Wait() }
+func (p osProcess) Kill() error { return p.cmd.Process.Kill() }
+
+func outputs(c Cmd) (stdout, stderr io.Writer) {
+	stdout, stderr = c.Stdout, c.Stderr
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	return stdout, stderr
 }
 
 // Output implements Runner.
@@ -166,21 +210,10 @@ func mergeEnv(env map[string]string) []string {
 	return merged
 }
 
-// StartBackground starts a long-running process in background with custom env and context
-func StartBackground(ctx context.Context, env map[string]string, name string, args ...string) (*exec.Cmd, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if len(env) > 0 {
-		cmd.Env = mergeEnv(env)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	return cmd, nil
+// Start launches a long-running command in the background through the
+// package-level runner. The process is killed when ctx is done.
+func Start(ctx context.Context, c Cmd) (Process, error) {
+	return current().Start(ctx, c)
 }
 
 // dockerEngineProcessNames are process-name fragments that must never be killed by
