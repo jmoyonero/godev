@@ -13,6 +13,12 @@ Release notes with full commit lists are also published on the
 - **Breaking.** The generated Dockerfile no longer hardcodes the maintainer's GitHub organization. `GOPRIVATE` and the SSH rewrite use the prefix in `docker.private_modules`, or the owner of the module declared in `go.mod` when it is not set. A project whose dependencies are all public gets a builder stage with no `GOPRIVATE`, no `openssh-client` and no `SSH_DEPLOY_KEY_B64`, and `build-image` no longer hands a key to Docker there.
 - **Breaking.** The local stack no longer defaults to the `loaney_db` database owned by `admin`: `db_name` defaults to `<name>_db` taken from `.godev.yaml` (`app_db` when the project has no name) and `db_user` to `postgres`. Projects relying on the old defaults must set `infra.db_name` and `infra.db_user` explicitly.
 - The database container runs in `UTC` instead of `Europe/Madrid`.
+- **Breaking.** `build-image` hands the SSH deploy key to Docker as a BuildKit secret mounted on the `go mod download` layer, instead of the `SSH_DEPLOY_KEY_B64` build argument, so it no longer appears in the build metadata or in the machine's process list. Building a project with private modules now requires BuildKit, the default since Docker 23.
+- **Breaking.** The deploy key is never taken from `~/.ssh` implicitly. It comes from `--ssh-key`, from the new `docker.ssh_key` option or from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY`, and an unreadable path is now an error instead of a silent fallback.
+- `go.mod` declares `go 1.27` instead of `go 1.27.1`, so Go 1.27.0 no longer has to download a newer toolchain to install godev.
+
+### Added
+- `docker.ssh_key` in `.godev.yaml`: the path of the key that downloads the project's private modules, with `~` expanded.
 
 ## [0.5.1] - 2026-09-19
 

@@ -117,6 +117,11 @@ type DockerConfig struct {
 	// through GOPRIVATE and fetches those modules over SSH. When it is empty,
 	// the prefix is taken from the module path in go.mod.
 	PrivateModules string `yaml:"private_modules,omitempty"`
+	// SSHKey is the path to the private key that downloads those modules, used
+	// when --ssh-key is not given. godev never picks a key from ~/.ssh on its
+	// own: a project has to point at one, here or through SSH_DEPLOY_KEY_B64 /
+	// SSH_DEPLOY_KEY. A leading ~ is expanded.
+	SSHKey string `yaml:"ssh_key,omitempty"`
 }
 
 type InfraConfig struct {

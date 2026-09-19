@@ -9,6 +9,7 @@ import (
 
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/docker"
+	"github.com/jmoyonero/godev/pkg/execx"
 )
 
 // withoutSSHKeys isolates the test from the developer's real SSH keys and
@@ -98,21 +99,75 @@ func TestBuildImageCommand(t *testing.T) {
 		assertCommands(t, fake, "docker build -f - --target scheduler --build-arg TARGET=scheduler -t scheduler:latest .")
 	})
 
-	t.Run("passes the SSH key as a base64 build arg for private modules", func(t *testing.T) {
+	t.Run("mounts the SSH key as a build secret for private modules", func(t *testing.T) {
 		fake := setup(t)
 		withoutSSHKeys(t)
 		writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
 		writeFile(t, "deploy_key", "PRIVATE KEY")
 
+		// The secret file only exists while docker runs, so it is read from
+		// inside the call.
+		var secret, secretPath string
+		fake.Handler = func(c execx.Cmd) ([]byte, error) {
+			secretPath = secretSource(c)
+			data, err := os.ReadFile(secretPath)
+			if err != nil {
+				t.Errorf("reading the mounted secret: %v", err)
+			}
+			secret = string(data)
+			return nil, nil
+		}
+
 		if _, err := execute(t, "build-image", "--ssh-key", "deploy_key"); err != nil {
 			t.Fatal(err)
 		}
-		wantArg := "SSH_DEPLOY_KEY_B64=" + base64.StdEncoding.EncodeToString([]byte("PRIVATE KEY"))
-		if got := fake.Commands()[0]; !strings.Contains(got, "--build-arg "+wantArg+" ") {
-			t.Errorf("docker build is missing the SSH build arg: %s", got)
+		if secret != "PRIVATE KEY" {
+			t.Errorf("the secret handed to docker = %q, want the key", secret)
+		}
+		if got := fake.Commands()[0]; strings.Contains(got, "PRIVATE KEY") || strings.Contains(got, "SSH_DEPLOY_KEY_B64") {
+			t.Errorf("the key reached docker's command line: %s", got)
+		}
+		if _, err := os.Stat(secretPath); !os.IsNotExist(err) {
+			t.Errorf("the temporary key file survived the build: %v", err)
 		}
 		if got := string(fake.Calls()[0].Stdin); !strings.Contains(got, "ENV GOPRIVATE=github.com/acme/*") {
 			t.Errorf("the Dockerfile does not declare the private modules of go.mod:\n%s", got)
+		}
+	})
+
+	t.Run("takes the key from docker.ssh_key when --ssh-key is absent", func(t *testing.T) {
+		fake := setup(t)
+		withoutSSHKeys(t)
+		writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
+		writeFile(t, "keys/deploy_key", "CONFIGURED KEY")
+		writeFile(t, config.DefaultConfigFile, "docker:\n  ssh_key: keys/deploy_key\n")
+
+		var secret string
+		fake.Handler = func(c execx.Cmd) ([]byte, error) {
+			data, _ := os.ReadFile(secretSource(c))
+			secret = string(data)
+			return nil, nil
+		}
+
+		if _, err := execute(t, "build-image"); err != nil {
+			t.Fatal(err)
+		}
+		if secret != "CONFIGURED KEY" {
+			t.Errorf("the secret handed to docker = %q, want the configured key", secret)
+		}
+	})
+
+	t.Run("never picks up a key from the home directory", func(t *testing.T) {
+		fake := setup(t)
+		home := withoutSSHKeys(t)
+		writeFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "PERSONAL KEY")
+		writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
+
+		if _, err := execute(t, "build-image"); err != nil {
+			t.Fatal(err)
+		}
+		if got := fake.Commands()[0]; strings.Contains(got, "--secret") {
+			t.Errorf("docker build got a secret nobody asked for: %s", got)
 		}
 	})
 
@@ -130,7 +185,7 @@ func TestBuildImageCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("without private modules the key is not passed to docker", func(t *testing.T) {
+	t.Run("without private modules the key is not handed to docker", func(t *testing.T) {
 		fake := setup(t)
 		withoutSSHKeys(t)
 		writeFile(t, "go.mod", "module myapp\n\ngo 1.27\n")
@@ -139,9 +194,18 @@ func TestBuildImageCommand(t *testing.T) {
 		if _, err := execute(t, "build-image", "--ssh-key", "deploy_key"); err != nil {
 			t.Fatal(err)
 		}
-		if got := fake.Commands()[0]; strings.Contains(got, "SSH_DEPLOY_KEY_B64") {
-			t.Errorf("docker build received an SSH key for a project without private modules: %s", got)
+		if got := fake.Commands()[0]; strings.Contains(got, "--secret") {
+			t.Errorf("docker build received a key for a project without private modules: %s", got)
 		}
+	})
+
+	t.Run("reports an unreadable key", func(t *testing.T) {
+		setup(t)
+		withoutSSHKeys(t)
+		writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
+
+		_, err := execute(t, "build-image", "--ssh-key", "missing_key")
+		assertErrorContains(t, err, "reading the SSH key")
 	})
 
 	t.Run("reports a failed build", func(t *testing.T) {
@@ -155,66 +219,107 @@ func TestBuildImageCommand(t *testing.T) {
 }
 
 func TestResolveSSHDeployKey(t *testing.T) {
-	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
-
 	t.Run("nothing found", func(t *testing.T) {
 		withoutSSHKeys(t)
-		if key, source := resolveSSHDeployKey(""); key != "" || source != "" {
-			t.Errorf("resolveSSHDeployKey() = (%q, %q), want empty", key, source)
+		key, source, err := resolveSSHDeployKey("", "")
+		if key != nil || source != "" || err != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q, %v), want empty", key, source, err)
 		}
 	})
 
-	t.Run("explicit path wins over everything", func(t *testing.T) {
+	t.Run("the home directory is never searched", func(t *testing.T) {
 		home := withoutSSHKeys(t)
-		t.Setenv("SSH_DEPLOY_KEY_B64", b64("from-env"))
-		writeFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "from-home")
-		explicit := filepath.Join(t.TempDir(), "key")
+		writeFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "personal")
+		writeFile(t, filepath.Join(home, ".ssh", "id_rsa"), "personal")
+
+		if key, source, _ := resolveSSHDeployKey("", ""); key != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q), want no key from %s", key, source, home)
+		}
+	})
+
+	t.Run("the flag wins over the config and the environment", func(t *testing.T) {
+		withoutSSHKeys(t)
+		t.Setenv("SSH_DEPLOY_KEY", "from-env")
+		dir := t.TempDir()
+		configured := filepath.Join(dir, "configured")
+		writeFile(t, configured, "from-config")
+		explicit := filepath.Join(dir, "key")
 		writeFile(t, explicit, "explicit")
 
-		key, source := resolveSSHDeployKey(explicit)
-		if key != b64("explicit") || source != explicit {
-			t.Errorf("resolveSSHDeployKey() = (%q, %q), want the explicit key", key, source)
+		key, source, err := resolveSSHDeployKey(explicit, configured)
+		if string(key) != "explicit" || source != explicit || err != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q, %v), want the explicit key", key, source, err)
 		}
 	})
 
-	t.Run("an unreadable explicit path falls through", func(t *testing.T) {
+	t.Run("the config wins over the environment", func(t *testing.T) {
 		withoutSSHKeys(t)
-		t.Setenv("SSH_DEPLOY_KEY", "raw")
+		t.Setenv("SSH_DEPLOY_KEY", "from-env")
+		configured := filepath.Join(t.TempDir(), "configured")
+		writeFile(t, configured, "from-config")
 
-		key, source := resolveSSHDeployKey("/does/not/exist")
-		if key != b64("raw") || source != "env:SSH_DEPLOY_KEY" {
-			t.Errorf("resolveSSHDeployKey() = (%q, %q), want SSH_DEPLOY_KEY", key, source)
+		key, source, err := resolveSSHDeployKey("", configured)
+		if string(key) != "from-config" || source != configured || err != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q, %v), want the configured key", key, source, err)
 		}
 	})
 
-	t.Run("SSH_DEPLOY_KEY_B64 is passed through as is", func(t *testing.T) {
-		withoutSSHKeys(t)
-		t.Setenv("SSH_DEPLOY_KEY_B64", "already-b64")
-		t.Setenv("SSH_DEPLOY_KEY", "raw")
-
-		key, source := resolveSSHDeployKey("")
-		if key != "already-b64" || source != "env:SSH_DEPLOY_KEY_B64" {
-			t.Errorf("resolveSSHDeployKey() = (%q, %q), want SSH_DEPLOY_KEY_B64", key, source)
-		}
-	})
-
-	t.Run("prefers id_ed25519 over id_rsa and skips empty files", func(t *testing.T) {
+	t.Run("a configured path expands ~", func(t *testing.T) {
 		home := withoutSSHKeys(t)
-		writeFile(t, filepath.Join(home, ".ssh", "id_rsa"), "rsa")
+		writeFile(t, filepath.Join(home, "keys", "deploy"), "expanded")
 
-		key, source := resolveSSHDeployKey("")
-		if key != b64("rsa") || source != filepath.Join(home, ".ssh", "id_rsa") {
-			t.Errorf("resolveSSHDeployKey() = (%q, %q), want id_rsa", key, source)
-		}
-
-		writeFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "")
-		if key, _ := resolveSSHDeployKey(""); key != b64("rsa") {
-			t.Errorf("an empty id_ed25519 was used instead of id_rsa")
-		}
-
-		writeFile(t, filepath.Join(home, ".ssh", "id_ed25519"), "ed")
-		if key, _ := resolveSSHDeployKey(""); key != b64("ed") {
-			t.Errorf("id_ed25519 was not preferred over id_rsa")
+		key, source, err := resolveSSHDeployKey("", "~/keys/deploy")
+		if string(key) != "expanded" || source != filepath.Join(home, "keys", "deploy") || err != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q, %v), want the key under HOME", key, source, err)
 		}
 	})
+
+	t.Run("a missing path is an error", func(t *testing.T) {
+		withoutSSHKeys(t)
+		t.Setenv("SSH_DEPLOY_KEY", "from-env")
+
+		if _, _, err := resolveSSHDeployKey("/does/not/exist", ""); err == nil {
+			t.Fatal("resolveSSHDeployKey() error = nil, want a read error instead of a silent fallback")
+		}
+	})
+
+	t.Run("SSH_DEPLOY_KEY_B64 is decoded", func(t *testing.T) {
+		withoutSSHKeys(t)
+		t.Setenv("SSH_DEPLOY_KEY_B64", base64.StdEncoding.EncodeToString([]byte("decoded"))+"\n")
+		t.Setenv("SSH_DEPLOY_KEY", "raw")
+
+		key, source, err := resolveSSHDeployKey("", "")
+		if string(key) != "decoded" || source != "env:SSH_DEPLOY_KEY_B64" || err != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q, %v), want the decoded key", key, source, err)
+		}
+	})
+
+	t.Run("invalid base64 is an error", func(t *testing.T) {
+		withoutSSHKeys(t)
+		t.Setenv("SSH_DEPLOY_KEY_B64", "not base64!")
+
+		_, _, err := resolveSSHDeployKey("", "")
+		assertErrorContains(t, err, "not valid base64")
+	})
+
+	t.Run("SSH_DEPLOY_KEY is used as is", func(t *testing.T) {
+		withoutSSHKeys(t)
+		t.Setenv("SSH_DEPLOY_KEY", "raw")
+
+		key, source, err := resolveSSHDeployKey("", "")
+		if string(key) != "raw" || source != "env:SSH_DEPLOY_KEY" || err != nil {
+			t.Errorf("resolveSSHDeployKey() = (%q, %q, %v), want the raw key", key, source, err)
+		}
+	})
+}
+
+// secretSource returns the path of the file docker was told to mount as the
+// build secret, or an empty string when the command carries none.
+func secretSource(c execx.Cmd) string {
+	for _, arg := range c.Args {
+		if prefix := "id=" + docker.SSHSecretID + ",src="; strings.HasPrefix(arg, prefix) {
+			return strings.TrimPrefix(arg, prefix)
+		}
+	}
+	return ""
 }

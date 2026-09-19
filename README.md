@@ -91,7 +91,7 @@ To test the release locally without publishing: `go run github.com/goreleaser/go
 ### Requirements
 
 - **Go 1.27+.** `golangci-lint` (at the `lint.version` version), `gosec` and `govulncheck` run through `go run`, with no manual install. `godev generate` uses the `mockgen` from `go.uber.org/mock` declared in the microservice's `go.mod`.
-- **Docker** with Compose v2, for `infra`, `run`, `e2e` and `build-image`.
+- **Docker** with Compose v2, for `infra`, `run`, `e2e` and `build-image`. Building a project with private modules also needs BuildKit (the default since Docker 23) for the deploy key's secret mount.
 - **Python 3**, only for `e2e` (`godev` creates the virtualenv).
 - **Optional:** [`gotestsum`](https://github.com/gotestyourself/gotestsum) for more readable test output (`go install gotest.tools/gotestsum@latest`).
 
@@ -148,7 +148,9 @@ godev build-image --ssh-key ~/.ssh/deploy_key    # Key for private Go modules
 godev build-image --no-cache                     # Builds without cache
 ```
 
-**Private modules.** The generated Dockerfile only configures `GOPRIVATE` and SSH when the project has private modules. Their `host/owner` prefix is taken from `docker.private_modules` in `.godev.yaml`, or, when it is not set, from the module path in `go.mod` (`module github.com/acme/orders` → `github.com/acme`). In that case the SSH key comes from `--ssh-key`, from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY` or from `~/.ssh/id_ed25519` / `~/.ssh/id_rsa`. It is only used during `go mod download` and never ends up in the image.
+**Private modules.** The generated Dockerfile only configures `GOPRIVATE` and SSH when the project has private modules. Their `host/owner` prefix is taken from `docker.private_modules` in `.godev.yaml`, or, when it is not set, from the module path in `go.mod` (`module github.com/acme/orders` → `github.com/acme`).
+
+The key that downloads them is always pointed at explicitly, in this order: `--ssh-key`, `docker.ssh_key` in `.godev.yaml`, `SSH_DEPLOY_KEY_B64` (base64) or `SSH_DEPLOY_KEY` (raw). `godev` never picks one up from `~/.ssh` on its own, so a build cannot silently ship your personal key. It is handed to Docker as a [BuildKit secret](https://docs.docker.com/build/building/secrets/) mounted only on the `go mod download` layer: it never appears in the image, in the build metadata or in the machine's process list.
 
 ### 4. Local Infrastructure (Docker Compose)
 
@@ -236,6 +238,7 @@ docker:
   # the owner of the module in go.mod is used, and a project whose modules are
   # all public gets a Dockerfile with no GOPRIVATE or SSH handling.
   private_modules: github.com/acme
+  ssh_key: ~/.ssh/orders_deploy_key   # Key for those modules, when --ssh-key is not given
 
 lint:
   version: "v2.13.2"
