@@ -18,7 +18,11 @@ var (
 	testShuffle     string
 	testPath        string
 	testExcludeDirs []string
+	testFormat      string
+	testPlain       bool
 )
+
+const gotestsumInstallHint = "go install gotest.tools/gotestsum@latest"
 
 var testCmd = &cobra.Command{
 	Use:   "test",
@@ -37,7 +41,7 @@ var testCmd = &cobra.Command{
 			path = "./..."
 		}
 
-		cmdArgs := []string{"test", "-v"}
+		var cmdArgs []string
 
 		if testRace || cfg.Test.Race {
 			cmdArgs = append(cmdArgs, "-race")
@@ -95,8 +99,24 @@ var testCmd = &cobra.Command{
 
 		cmdArgs = append(cmdArgs, targets...)
 
+		format := testFormat
+		if format == "" {
+			format = cfg.Test.Format
+		}
+		if format == "" {
+			format = config.DefaultTestFormat
+		}
+
+		_, lookErr := exec.LookPath("gotestsum")
+		useGotestsum := !testPlain && lookErr == nil
+		if !testPlain && !useGotestsum {
+			ui.Dim("💡 Instala gotestsum para una salida con colores y resumen: %s", gotestsumInstallHint)
+		}
+
+		name, args := testCommand(useGotestsum, format, cmdArgs)
+
 		ui.Step("🧪 Ejecutando tests unitarios (%s)...", path)
-		if err := execx.Run("go", cmdArgs...); err != nil {
+		if err := execx.Run(name, args...); err != nil {
 			return fmt.Errorf("fallaron los tests unitarios: %w", err)
 		}
 
@@ -105,10 +125,23 @@ var testCmd = &cobra.Command{
 	},
 }
 
+// testCommand returns the command that runs the unit tests. goArgs are the
+// `go test` flags and packages, without the subcommand or -v. With gotestsum
+// the output is formatted (and colored on a terminal); without it, it is the
+// plain verbose `go test`.
+func testCommand(useGotestsum bool, format string, goArgs []string) (string, []string) {
+	if useGotestsum {
+		return "gotestsum", append([]string{"--format", format, "--"}, goArgs...)
+	}
+	return "go", append([]string{"test", "-v"}, goArgs...)
+}
+
 func init() {
 	testCmd.Flags().BoolVar(&testRace, "race", true, "Habilita el detector de condiciones de carrera (-race)")
 	testCmd.Flags().StringVar(&testShuffle, "shuffle", "on", "Orden aleatorio de tests (-shuffle=on)")
 	testCmd.Flags().StringVar(&testPath, "path", "", "Ruta específica de paquetes a testear (ej: ./internal/...)")
 	testCmd.Flags().StringSliceVar(&testExcludeDirs, "exclude-dir", nil, "Directorios o paquetes a excluir (ej: internal/integration)")
+	testCmd.Flags().StringVar(&testFormat, "format", "", "Formato de salida de gotestsum (testname, pkgname, dots, testdox, pkgname-and-test-fails...); por defecto test.format o testname")
+	testCmd.Flags().BoolVar(&testPlain, "plain", false, "Usa 'go test -v' aunque gotestsum esté instalado")
 	rootCmd.AddCommand(testCmd)
 }
