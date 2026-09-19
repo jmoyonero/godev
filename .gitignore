@@ -19,7 +19,9 @@ vendor/
 # Go workspace file
 go.work
 
-# IDEs
+# IDEs and assistant scratch space
 .idea/
 .vscode/
+.junie/
+.claude/settings.local.json
 .DS_Store
