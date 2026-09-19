@@ -1,6 +1,6 @@
 # godev 🛠️
 
-[![Go Version](https://img.shields.io/badge/go-1.26+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.27+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Release](https://img.shields.io/github/v/release/jmoyonero/godev?color=brightgreen)](https://github.com/jmoyonero/godev/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/jmoyonero/godev/actions/workflows/ci.yml/badge.svg)](https://github.com/jmoyonero/godev/actions/workflows/ci.yml)
@@ -35,7 +35,7 @@ export PATH="$HOME/go/bin:$PATH"
 
 ### Requisitos
 
-- **Go 1.26+.** `golangci-lint` (en la versión de `lint.version`), `gosec` y `govulncheck` se ejecutan con `go run`, sin instalarlos a mano. `godev generate` usa el `mockgen` de `go.uber.org/mock` declarado en el `go.mod` del microservicio.
+- **Go 1.27+.** `golangci-lint` (en la versión de `lint.version`), `gosec` y `govulncheck` se ejecutan con `go run`, sin instalarlos a mano. `godev generate` usa el `mockgen` de `go.uber.org/mock` declarado en el `go.mod` del microservicio.
 - **Docker** con Compose v2, para `infra`, `run`, `e2e` y `build-image`.
 - **Python 3**, solo para `e2e` (el virtualenv lo crea `godev`).
 - **Opcional:** [`gotestsum`](https://github.com/gotestyourself/gotestsum) para una salida de tests más legible (`go install gotest.tools/gotestsum@latest`).

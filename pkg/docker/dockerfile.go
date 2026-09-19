@@ -75,7 +75,7 @@ func GenerateUniversalDockerfile() (string, error) {
 func detectGoVersion() string {
 	f, err := os.Open("go.mod")
 	if err != nil {
-		return "1.26.6"
+		return "1.27.1"
 	}
 	defer f.Close()
 
@@ -89,7 +89,7 @@ func detectGoVersion() string {
 			}
 		}
 	}
-	return "1.26.6"
+	return "1.27.1"
 }
 
 func detectCmdTargets() []string {
