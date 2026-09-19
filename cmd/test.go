@@ -20,6 +20,9 @@ var (
 	testExcludeDirs []string
 	testFormat      string
 	testPlain       bool
+	testCover       bool
+	testCoverFile   string
+	testHTML        bool
 )
 
 const gotestsumInstallHint = "go install gotest.tools/gotestsum@latest"
@@ -97,6 +100,22 @@ var testCmd = &cobra.Command{
 			return nil
 		}
 
+		cover := cfg.Test.Cover
+		if cmd.Flags().Changed("cover") {
+			cover = testCover
+		}
+		cover = cover || testHTML // the HTML report needs a profile
+		profile := testCoverFile
+		if profile == "" {
+			profile = cfg.Test.CoverProfile
+		}
+		if profile == "" {
+			profile = config.DefaultCoverProfile
+		}
+		if cover {
+			cmdArgs = append(cmdArgs, "-coverprofile="+profile)
+		}
+
 		cmdArgs = append(cmdArgs, targets...)
 
 		format := testFormat
@@ -121,8 +140,44 @@ var testCmd = &cobra.Command{
 		}
 
 		ui.Success("Tests unitarios superados exitosamente.")
+
+		if cover {
+			return reportCoverage(profile, testHTML)
+		}
 		return nil
 	},
+}
+
+// reportCoverage prints the total coverage of profile and, when html is set,
+// opens the annotated source report in the browser.
+func reportCoverage(profile string, html bool) error {
+	out, err := exec.Command("go", "tool", "cover", "-func="+profile).Output()
+	if err != nil {
+		return fmt.Errorf("no se pudo leer el perfil de cobertura %s: %w", profile, err)
+	}
+	total, ok := coverageTotal(string(out))
+	if !ok {
+		return fmt.Errorf("el perfil de cobertura %s no contiene un total", profile)
+	}
+	ui.Info("📊 Cobertura total: %s (perfil: %s)", total, profile)
+
+	if html {
+		if err := execx.Run("go", "tool", "cover", "-html="+profile); err != nil {
+			return fmt.Errorf("no se pudo abrir el informe HTML de cobertura: %w", err)
+		}
+	}
+	return nil
+}
+
+// coverageTotal extracts the overall percentage from the output of
+// `go tool cover -func`, whose last line reads "total:  (statements)  62.9%".
+func coverageTotal(funcOutput string) (string, bool) {
+	lines := strings.Split(strings.TrimSpace(funcOutput), "\n")
+	fields := strings.Fields(lines[len(lines)-1])
+	if len(fields) < 2 || fields[0] != "total:" {
+		return "", false
+	}
+	return fields[len(fields)-1], true
 }
 
 // testCommand returns the command that runs the unit tests. goArgs are the
@@ -143,5 +198,8 @@ func init() {
 	testCmd.Flags().StringSliceVar(&testExcludeDirs, "exclude-dir", nil, "Directorios o paquetes a excluir (ej: internal/integration)")
 	testCmd.Flags().StringVar(&testFormat, "format", "", "Formato de salida de gotestsum (testname, pkgname, dots, testdox, pkgname-and-test-fails...); por defecto test.format o testname")
 	testCmd.Flags().BoolVar(&testPlain, "plain", false, "Usa 'go test -v' aunque gotestsum esté instalado")
+	testCmd.Flags().BoolVar(&testCover, "cover", false, "Genera el perfil de cobertura y muestra el total al terminar (o test.cover)")
+	testCmd.Flags().StringVar(&testCoverFile, "cover-profile", "", "Fichero del perfil de cobertura; por defecto test.cover_profile o coverage.out")
+	testCmd.Flags().BoolVar(&testHTML, "html", false, "Abre el informe HTML de cobertura (implica --cover)")
 	rootCmd.AddCommand(testCmd)
 }

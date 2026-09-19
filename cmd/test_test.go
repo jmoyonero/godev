@@ -55,3 +55,32 @@ func TestTestCommandDoesNotMutateItsInput(t *testing.T) {
 		t.Errorf("goArgs changed: %v", goArgs)
 	}
 }
+
+func TestCoverageTotal(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
+		want   string
+		wantOK bool
+	}{
+		{
+			name:   "reads the total of a go tool cover -func report",
+			output: "github.com/x/y/a.go:10:\tFoo\t100.0%\ngithub.com/x/y/a.go:20:\tBar\t50.0%\ntotal:\t\t\t\t\t(statements)\t62.9%\n",
+			want:   "62.9%",
+			wantOK: true,
+		},
+		{name: "tolerates a missing trailing newline", output: "total:\t(statements)\t100.0%", want: "100.0%", wantOK: true},
+		{name: "rejects a report without a total", output: "github.com/x/y/a.go:10:\tFoo\t100.0%\n"},
+		{name: "rejects an empty report", output: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := coverageTotal(tc.output)
+
+			if got != tc.want || ok != tc.wantOK {
+				t.Errorf("coverageTotal() = (%q, %t), want (%q, %t)", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}

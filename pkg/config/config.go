@@ -43,6 +43,9 @@ const DefaultGolangciVersion = "v2.13.2"
 // DefaultTestFormat is the gotestsum format used when none is configured.
 const DefaultTestFormat = "testname"
 
+// DefaultCoverProfile is the coverage profile path used when none is configured.
+const DefaultCoverProfile = "coverage.out"
+
 type SecConfig struct {
 	ExcludeDirs []string `yaml:"exclude_dirs"`
 }
@@ -55,6 +58,10 @@ type TestConfig struct {
 	// Format is the gotestsum output format (testname, pkgname, dots, testdox,
 	// pkgname-and-test-fails...). It only applies when gotestsum is installed.
 	Format string `yaml:"format"`
+	// Cover enables the coverage profile and the total summary by default.
+	Cover bool `yaml:"cover"`
+	// CoverProfile is where the coverage profile is written.
+	CoverProfile string `yaml:"cover_profile"`
 }
 
 type InfraConfig struct {
@@ -160,11 +167,12 @@ func DefaultConfig() *Config {
 			ExcludeDirs: []string{"internal/oas", "internal/mocks"},
 		},
 		Test: TestConfig{
-			Path:        "./...",
-			ExcludeDirs: []string{},
-			Race:        true,
-			Shuffle:     "on",
-			Format:      DefaultTestFormat,
+			Path:         "./...",
+			ExcludeDirs:  []string{},
+			Race:         true,
+			Shuffle:      "on",
+			Format:       DefaultTestFormat,
+			CoverProfile: DefaultCoverProfile,
 		},
 		E2E: E2EConfig{
 			Enabled:      true,
