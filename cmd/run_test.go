@@ -366,3 +366,86 @@ func TestPrefixWriter(t *testing.T) {
 		t.Errorf("after Flush = %q, want %q", got, want)
 	}
 }
+
+func TestRunCommand_ReportsSeedFailures(t *testing.T) {
+	t.Run("seeds that cannot be read", func(t *testing.T) {
+		// seeds_file goes inside the infra block the helper already wrote.
+		infraProjectWith(t, "  seeds_file: seeds.sql\n"+servicesConfig(t))
+		unreadableFile(t, "seeds.sql", "select 1;\n")
+
+		_, err := execute(t, "run", "--reset-db")
+		assertErrorContains(t, err, "could not read the seeds file")
+	})
+
+	t.Run("seeds that psql rejects", func(t *testing.T) {
+		fake := infraProjectWith(t, "  seeds_file: seeds.sql\n"+servicesConfig(t))
+		writeFile(t, "seeds.sql", "select 1;\n")
+		fake.Handler = respond(map[string]answer{composePrefix + "exec -T db psql": {err: errFailed}})
+
+		_, err := execute(t, "run", "--reset-db")
+		assertErrorContains(t, err, "database restore failed")
+	})
+}
+
+func TestBuildServices_ReportsAnUnusableTempDir(t *testing.T) {
+	setup(t)
+	blockTempDir(t)
+
+	_, err := buildServices(&config.Config{}, []config.ServiceConfig{{Name: "api", Cmd: "./cmd/api"}})
+	assertErrorContains(t, err, "could not create a directory for the service binaries")
+}
+
+func TestBinaryName(t *testing.T) {
+	tests := []struct {
+		goos string
+		want string
+	}{
+		{"linux", "api"},
+		{"darwin", "api"},
+		{"windows", "api.exe"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.goos, func(t *testing.T) {
+			if got := binaryName(tt.goos, "api"); got != tt.want {
+				t.Errorf("binaryName(%q) = %q, want %q", tt.goos, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrefixWriter_ReportsAFailingDestination(t *testing.T) {
+	w := &prefixWriter{mu: &sync.Mutex{}, out: failingWriter{}, prefix: "[api]"}
+
+	if _, err := w.Write([]byte("a line\n")); err == nil {
+		t.Error("Write() error = nil, want the destination's failure")
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+// cancelingContext models the instant in which a run is being canceled but the
+// cancellation has not reached the select yet: Done still blocks while Err
+// already reports it. Reproducing that window with a real context would depend
+// on which of two ready channels the scheduler picks.
+type cancelingContext struct{ context.Context }
+
+func (cancelingContext) Done() <-chan struct{} { return nil }
+func (cancelingContext) Err() error            { return context.Canceled }
+
+func TestServiceSetWait_IgnoresExitsWhileShuttingDown(t *testing.T) {
+	fake := setup(t)
+
+	s := &serviceSet{bins: map[string]string{"api": "api"}, services: []config.ServiceConfig{{Name: "api"}}}
+	if err := s.start(context.Background(), nil); err != nil {
+		t.Fatalf("start() error = %v", err)
+	}
+	// The service dies as the run is being torn down: that is a shutdown, not
+	// a service failure, so wait must not report it.
+	fake.Processes()[0].Exit(errors.New("crashed"))
+
+	if err := s.wait(cancelingContext{context.Background()}); err != nil {
+		t.Errorf("wait() = %v, want nil while shutting down", err)
+	}
+}

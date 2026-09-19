@@ -164,3 +164,222 @@ func TestTearDownManagedStack(t *testing.T) {
 		}
 	})
 }
+
+// inTempHome points the temporary directory at a private one, which is where
+// the generated compose file and every provisioning file are written.
+func inTempHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, v := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(v, dir)
+	}
+	return dir
+}
+
+// blockPath puts a directory where the code expects to write a file (or a file
+// where it expects a directory), which is what makes the write fail.
+func blockPath(t *testing.T, path string, asDir bool) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if asDir {
+		if err := os.MkdirAll(path, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if err := os.WriteFile(path, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateDynamicCompose_NamesTheProject(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *config.Config
+		want string
+	}{
+		{"explicit project name", &config.Config{Name: "orders-api", Infra: config.InfraConfig{ProjectName: "chosen"}}, "chosen"},
+		{"the -api suffix is dropped", &config.Config{Name: "orders-api"}, "orders"},
+		{"the -service suffix is dropped", &config.Config{Name: "orders-service"}, "orders"},
+		{"the -daemon suffix is dropped", &config.Config{Name: "orders-daemon"}, "orders"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inProject(t)
+			inTempHome(t)
+
+			got, err := infra.GenerateDynamicCompose(tt.cfg)
+			if err != nil {
+				t.Fatalf("GenerateDynamicCompose() error = %v", err)
+			}
+			if want := "docker-compose-" + tt.want + ".yaml"; filepath.Base(got) != want {
+				t.Errorf("compose file = %q, want it named after %q", filepath.Base(got), want)
+			}
+		})
+	}
+
+	t.Run("an unnamed project takes the directory name", func(t *testing.T) {
+		dir := inProject(t)
+		inTempHome(t)
+
+		got, err := infra.GenerateDynamicCompose(&config.Config{})
+		if err != nil {
+			t.Fatalf("GenerateDynamicCompose() error = %v", err)
+		}
+		if want := "docker-compose-" + filepath.Base(dir) + ".yaml"; filepath.Base(got) != want {
+			t.Errorf("compose file = %q, want %q", filepath.Base(got), want)
+		}
+	})
+}
+
+func TestGenerateDynamicCompose_DefaultServices(t *testing.T) {
+	inProject(t)
+	inTempHome(t)
+
+	// No services configured: the generated stack is the documented default.
+	got, err := infra.GenerateDynamicCompose(&config.Config{Name: "orders"})
+	if err != nil {
+		t.Fatalf("GenerateDynamicCompose() error = %v", err)
+	}
+
+	var parsed infra.ComposeConfig
+	data, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"db", "wiremock", "jaeger"} {
+		if _, ok := parsed.Services[want]; !ok {
+			t.Errorf("the default stack is missing %q", want)
+		}
+	}
+	if _, ok := parsed.Services["prometheus"]; ok {
+		t.Error("the default stack should not include prometheus")
+	}
+}
+
+func TestGenerateDynamicCompose_ReportsWriteFailures(t *testing.T) {
+	const project = "orders"
+	// Each case blocks exactly one path so a single write or mkdir fails.
+	tests := []struct {
+		name     string
+		services []string
+		path     func(tmp string) string
+		asDir    bool
+		wantErr  string
+	}{
+		{
+			name:  "the shared godev directory",
+			path:  func(tmp string) string { return filepath.Join(tmp, "godev") },
+			asDir: false,
+		},
+		{
+			name:  "the project directory",
+			path:  func(tmp string) string { return filepath.Join(tmp, "godev", project) },
+			asDir: false,
+		},
+		{
+			name:     "the otel-collector config",
+			services: []string{"prometheus"},
+			path: func(tmp string) string {
+				return filepath.Join(tmp, "godev", project, "otel-collector-config.yaml")
+			},
+			asDir:   true,
+			wantErr: "otel-collector config",
+		},
+		{
+			name:     "the prometheus config",
+			services: []string{"prometheus"},
+			path:     func(tmp string) string { return filepath.Join(tmp, "godev", project, "prometheus.yml") },
+			asDir:    true,
+			wantErr:  "prometheus config",
+		},
+		{
+			name:     "the grafana datasources directory",
+			services: []string{"grafana"},
+			path:     func(tmp string) string { return filepath.Join(tmp, "godev", project, "grafana") },
+			asDir:    false,
+		},
+		{
+			name:     "the grafana dashboards directory",
+			services: []string{"grafana"},
+			path: func(tmp string) string {
+				return filepath.Join(tmp, "godev", project, "grafana", "provisioning", "dashboards")
+			},
+			asDir: false,
+		},
+		{
+			name:     "the grafana datasources file",
+			services: []string{"grafana"},
+			path: func(tmp string) string {
+				return filepath.Join(tmp, "godev", project, "grafana", "provisioning", "datasources", "datasources.yaml")
+			},
+			asDir:   true,
+			wantErr: "grafana datasources",
+		},
+		{
+			name:     "the grafana dashboards file",
+			services: []string{"grafana"},
+			path: func(tmp string) string {
+				return filepath.Join(tmp, "godev", project, "grafana", "provisioning", "dashboards", "dashboards.yaml")
+			},
+			asDir:   true,
+			wantErr: "grafana dashboards.yaml",
+		},
+		{
+			name:     "the http client dashboard",
+			services: []string{"grafana"},
+			path: func(tmp string) string {
+				return filepath.Join(tmp, "godev", project, "grafana", "provisioning", "dashboards", "http-client-telemetry.json")
+			},
+			asDir:   true,
+			wantErr: "grafana dashboard json",
+		},
+		{
+			name:     "the database pool dashboard",
+			services: []string{"grafana"},
+			path: func(tmp string) string {
+				return filepath.Join(tmp, "godev", project, "grafana", "provisioning", "dashboards", "database-connection-pool.json")
+			},
+			asDir:   true,
+			wantErr: "grafana db dashboard json",
+		},
+		{
+			name:  "the compose file itself",
+			path:  func(tmp string) string { return filepath.Join(tmp, "godev", "docker-compose-"+project+".yaml") },
+			asDir: true, wantErr: "writing dynamic compose",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inProject(t)
+			tmp := inTempHome(t)
+			blockPath(t, tt.path(tmp), tt.asDir)
+
+			cfg := &config.Config{Name: project, Infra: config.InfraConfig{Services: tt.services}}
+			if _, err := infra.GenerateDynamicCompose(cfg); err == nil {
+				t.Fatalf("GenerateDynamicCompose() error = nil, want a failure writing %s", tt.path(tmp))
+			} else if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want it to mention %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestGenerateDynamicCompose_ReportsASerializationFailure(t *testing.T) {
+	inProject(t)
+	inTempHome(t)
+	restore := infra.SetComposeMarshaler(func(any) ([]byte, error) {
+		return nil, errors.New("cycle in the compose document")
+	})
+	defer restore()
+
+	_, err := infra.GenerateDynamicCompose(&config.Config{Name: "orders"})
+	if err == nil || !strings.Contains(err.Error(), "serializing dynamic compose") {
+		t.Errorf("error = %v, want the serialization failure", err)
+	}
+}

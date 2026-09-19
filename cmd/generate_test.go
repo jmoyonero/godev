@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"go/ast"
+	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -133,5 +135,79 @@ var _ = 1
 	writeFile(t, path, "not go code")
 	if _, err := extractInterfaces(path); err == nil {
 		t.Error("extractInterfaces() on invalid Go = nil error")
+	}
+}
+
+func TestGenerateMocks_SkipsWhatItCannotRead(t *testing.T) {
+	t.Run("an unlistable module", func(t *testing.T) {
+		fake := setup(t)
+		fake.Handler = respond(map[string]answer{
+			"go list -m":    {out: "example.com/svc\n"},
+			"go list ./...": {err: errFailed},
+		})
+
+		_, err := execute(t, "generate", "--mocks-only")
+		assertErrorContains(t, err, "error listing Go packages")
+	})
+
+	t.Run("packages that cannot be described", func(t *testing.T) {
+		fake := setup(t)
+		fake.Handler = respond(map[string]answer{
+			"go list -m":    {out: "example.com/svc\n"},
+			"go list ./...": {out: "example.com/svc/internal/a\nexample.com/svc/internal/b\nexample.com/svc/internal/c\n"},
+			// Fails outright.
+			"go list -f {{.Dir}}:::{{.Name}} example.com/svc/internal/a": {err: errFailed},
+			// Answers something that is not "dir:::name".
+			"go list -f {{.Dir}}:::{{.Name}} example.com/svc/internal/b": {out: "nonsense\n"},
+			// Points at a directory that does not exist.
+			"go list -f {{.Dir}}:::{{.Name}} example.com/svc/internal/c": {out: "/does/not/exist:::c\n"},
+		})
+
+		if _, err := execute(t, "generate", "--mocks-only"); err != nil {
+			t.Fatalf("generate skipped the unreadable packages with an error: %v", err)
+		}
+	})
+}
+
+func TestGenerateMocks_ReportsAnUnwritableMocksDirectory(t *testing.T) {
+	fake := setup(t)
+	writeFile(t, "internal/svc/repo.go", "package svc\n\ntype Repo interface{ Get() error }\n")
+	pkgDir, err := filepath.Abs("internal/svc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.Handler = respond(map[string]answer{
+		"go list -m":    {out: "example.com/svc\n"},
+		"go list ./...": {out: "example.com/svc/internal/svc\n"},
+		"go list -f":    {out: pkgDir + ":::svc\n"},
+	})
+	// internal/ is read-only, so internal/mocks cannot be created.
+	if os.Geteuid() == 0 {
+		t.Skip("root writes to a read-only directory anyway")
+	}
+	if err := os.Chmod("internal", 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod("internal", 0o700) })
+
+	_, err = execute(t, "generate", "--mocks-only")
+	assertErrorContains(t, err, "error creating directory")
+}
+
+func TestInterfacesIn_IgnoresNonTypeSpecs(t *testing.T) {
+	// A type declaration whose spec is not a TypeSpec cannot come out of the
+	// parser, but the walk still guards against it.
+	file := &ast.File{
+		Name: ast.NewIdent("svc"),
+		Decls: []ast.Decl{
+			&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.ImportSpec{Path: &ast.BasicLit{Value: `"fmt"`}}}},
+			&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{
+				&ast.TypeSpec{Name: ast.NewIdent("Repo"), Type: &ast.InterfaceType{Methods: &ast.FieldList{}}},
+			}},
+		},
+	}
+
+	if got := interfacesIn(file); len(got) != 1 || got[0] != "Repo" {
+		t.Errorf("interfacesIn() = %v, want [Repo]", got)
 	}
 }

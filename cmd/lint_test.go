@@ -124,3 +124,16 @@ func TestVulncheckCommand(t *testing.T) {
 	_, err := execute(t, "vulncheck")
 	assertErrorContains(t, err, "govulncheck found vulnerabilities")
 }
+
+func TestLintCommand_FallsBackToThePinnedVersion(t *testing.T) {
+	fake := setup(t)
+	writeFile(t, config.DefaultConfigFile, "lint:\n  version: \"\"\n")
+
+	if _, err := execute(t, "lint"); err != nil {
+		t.Fatal(err)
+	}
+	want := "go run " + golangciV2 + "@" + config.DefaultGolangciVersion + " run ./..."
+	if got := fake.Commands()[0]; got != want {
+		t.Errorf("command = %q, want %q", got, want)
+	}
+}

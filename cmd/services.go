@@ -38,6 +38,14 @@ type runningService struct {
 	proc execx.Process
 }
 
+// binaryName is the file name a service's binary gets on goos.
+func binaryName(goos, service string) string {
+	if goos == "windows" {
+		return service + ".exe"
+	}
+	return service
+}
+
 // buildServices frees the services' ports and builds their binaries into a
 // private temporary directory.
 func buildServices(cfg *config.Config, services []config.ServiceConfig) (*serviceSet, error) {
@@ -52,10 +60,7 @@ func buildServices(cfg *config.Config, services []config.ServiceConfig) (*servic
 			execx.FreePort(svc.Port)
 		}
 
-		bin := filepath.Join(binDir, svc.Name)
-		if runtime.GOOS == "windows" {
-			bin += ".exe"
-		}
+		bin := filepath.Join(binDir, binaryName(runtime.GOOS, svc.Name))
 		s.bins[svc.Name] = bin
 
 		ui.Step("🔨 Building '%s' (%s)...", svc.Name, svc.Cmd)

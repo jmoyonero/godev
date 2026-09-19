@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,10 +28,7 @@ func withoutSSHKeys(t *testing.T) string {
 func TestDockerfileCommand(t *testing.T) {
 	t.Run("prints the Dockerfile", func(t *testing.T) {
 		setup(t)
-		want, err := docker.GenerateUniversalDockerfile(docker.Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		want := docker.GenerateUniversalDockerfile(docker.Options{})
 
 		out, err := execute(t, "dockerfile")
 		if err != nil {
@@ -73,7 +71,7 @@ func TestBuildImageCommand(t *testing.T) {
 		}
 		assertCommands(t, fake, "docker build -f - --target api --build-arg TARGET=api -t api:latest .")
 
-		want, _ := docker.GenerateUniversalDockerfile(docker.Options{})
+		want := docker.GenerateUniversalDockerfile(docker.Options{})
 		if got := string(fake.Calls()[0].Stdin); got != want {
 			t.Errorf("docker build stdin is not the generated Dockerfile:\n%s", got)
 		}
@@ -322,4 +320,97 @@ func secretSource(c execx.Cmd) string {
 		}
 	}
 	return ""
+}
+
+func TestDockerfileCommand_ReportsAFailedWrite(t *testing.T) {
+	setup(t)
+	readOnlyCwd(t)
+
+	_, err := execute(t, "dockerfile", "--write")
+	assertErrorContains(t, err, "error writing Dockerfile")
+}
+
+func TestBuildImageCommand_EmptyTargetFallsBackToApi(t *testing.T) {
+	fake := setup(t)
+	withoutSSHKeys(t)
+
+	if _, err := execute(t, "build-image", "--target", "", "--tag", ""); err != nil {
+		t.Fatal(err)
+	}
+	assertCommands(t, fake, "docker build -f - --target api --build-arg TARGET=api -t api:latest .")
+}
+
+func TestBuildImageCommand_ReportsAKeyItCannotStage(t *testing.T) {
+	setup(t)
+	withoutSSHKeys(t)
+	writeFile(t, "go.mod", "module github.com/acme/svc\n\ngo 1.27\n")
+	writeFile(t, "deploy_key", "PRIVATE KEY")
+	blockTempDir(t)
+
+	_, err := execute(t, "build-image", "--ssh-key", "deploy_key")
+	assertErrorContains(t, err, "preparing the SSH key for the build")
+}
+
+func TestResolveSSHDeployKey_ReportsAnUnresolvableHome(t *testing.T) {
+	withoutSSHKeys(t)
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+
+	if _, _, err := resolveSSHDeployKey("~/keys/deploy", ""); err == nil {
+		t.Fatal("resolveSSHDeployKey() error = nil, want the unresolvable home")
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	t.Run("leaves an absolute path alone", func(t *testing.T) {
+		got, err := expandHome("/etc/keys/deploy")
+		if got != "/etc/keys/deploy" || err != nil {
+			t.Errorf("expandHome() = (%q, %v), want the path unchanged", got, err)
+		}
+	})
+
+	t.Run("expands a bare ~", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+
+		got, err := expandHome("~")
+		if got != home || err != nil {
+			t.Errorf("expandHome(\"~\") = (%q, %v), want %q", got, err, home)
+		}
+	})
+
+	t.Run("reports an unresolvable home", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+
+		if _, err := expandHome("~/keys"); err == nil {
+			t.Error("expandHome() error = nil, want the unresolvable home")
+		}
+	})
+}
+
+func TestWriteKeyFile(t *testing.T) {
+	t.Run("reports a directory it cannot create", func(t *testing.T) {
+		blockTempDir(t)
+
+		if _, _, err := writeKeyFile([]byte("key")); err == nil {
+			t.Fatal("writeKeyFile() error = nil, want the failure creating the directory")
+		}
+	})
+
+	t.Run("reports a key it cannot write", func(t *testing.T) {
+		prev := writeKeyToDisk
+		writeKeyToDisk = func(string, []byte, os.FileMode) error { return errors.New("disk full") }
+		t.Cleanup(func() { writeKeyToDisk = prev })
+
+		path, cleanup, err := writeKeyFile([]byte("key"))
+		if err == nil {
+			cleanup()
+			t.Fatal("writeKeyFile() error = nil, want the write failure")
+		}
+		if path != "" || cleanup != nil {
+			t.Error("writeKeyFile() returned a path after failing")
+		}
+	})
 }

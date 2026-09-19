@@ -158,6 +158,11 @@ func extractInterfaces(filePath string) ([]string, error) {
 		return nil, err
 	}
 
+	return interfacesIn(node), nil
+}
+
+// interfacesIn lists the interface types declared in a parsed file.
+func interfacesIn(node *ast.File) []string {
 	var interfaces []string
 	for _, decl := range node.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -177,7 +182,7 @@ func extractInterfaces(filePath string) ([]string, error) {
 		}
 	}
 
-	return interfaces, nil
+	return interfaces
 }
 
 func init() {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,9 +13,20 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/execx/execxtest"
+	"github.com/jmoyonero/godev/pkg/ui"
 )
+
+// TestMain silences godev's own console: these tests assert on the commands it
+// runs and on what cobra prints, not on the progress it reports to the user.
+func TestMain(m *testing.M) {
+	restore := ui.SetOutput(io.Discard, io.Discard)
+	code := m.Run()
+	restore()
+	os.Exit(code)
+}
 
 // execute runs the CLI with args, as if typed after "godev", and returns what
 // the command wrote through cobra's output. Flags are reset afterwards, since
@@ -130,3 +142,56 @@ func assertErrorContains(t *testing.T, err error, want string) {
 
 // errFailed stands for a tool exiting with a non-zero status.
 var errFailed = execxtest.ErrFailed
+
+// badConfig writes a .godev.yaml that cannot be parsed, so the command under
+// test has to surface the configuration error.
+func badConfig(t *testing.T) {
+	t.Helper()
+	writeFile(t, config.DefaultConfigFile, "infra: [not, a, mapping]\n")
+}
+
+// blockTempDir points the temporary directory at a path that is a file, so
+// everything godev tries to create under it fails.
+func blockTempDir(t *testing.T) {
+	t.Helper()
+	blocked := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocked, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(v, blocked)
+	}
+}
+
+// readOnlyCwd makes the current directory unwritable for the rest of the test,
+// so creating a file in it fails. Root ignores the permission bits, so there is
+// nothing to test there.
+func readOnlyCwd(t *testing.T) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root writes to a read-only directory anyway")
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	// Restored before the temporary directory is removed.
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+}
+
+// unreadableFile writes a file the process cannot read back, which is how the
+// tests reach the "exists but cannot be read" paths. Root reads it anyway.
+func unreadableFile(t *testing.T, path, content string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file with no permissions anyway")
+	}
+	writeFile(t, path, content)
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+}

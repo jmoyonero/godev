@@ -27,7 +27,7 @@ type Options struct {
 
 // GenerateUniversalDockerfile produces a standardized, hardened multi-stage Dockerfile
 // for any Go microservice by scanning the cmd/ directory for entrypoints.
-func GenerateUniversalDockerfile(opts Options) (string, error) {
+func GenerateUniversalDockerfile(opts Options) string {
 	goVersion := detectGoVersion()
 	targets := detectCmdTargets()
 
@@ -78,7 +78,7 @@ func GenerateUniversalDockerfile(opts Options) (string, error) {
 	sb.WriteString("EXPOSE 8080\n")
 	sb.WriteString("CMD [\"/app/entrypoint\"]\n")
 
-	return sb.String(), nil
+	return sb.String()
 }
 
 // writeDependencyStage writes the dependency download layer. With a private
