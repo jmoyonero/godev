@@ -1,16 +1,15 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/jmoyonero/godev/pkg/docker"
+	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/ui"
 )
 
@@ -39,7 +38,7 @@ var dockerfileCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Print(content)
+		fmt.Fprint(cmd.OutOrStdout(), content)
 		return nil
 	},
 }
@@ -82,12 +81,7 @@ var buildImageCmd = &cobra.Command{
 
 		buildArgs = append(buildArgs, "-t", buildTag, ".")
 
-		c := exec.Command("docker", buildArgs...)
-		c.Stdin = bytes.NewReader([]byte(content))
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-
-		if err := c.Run(); err != nil {
+		if err := execx.RunWithInput([]byte(content), "docker", buildArgs...); err != nil {
 			return fmt.Errorf("docker image build failed: %w", err)
 		}
 
