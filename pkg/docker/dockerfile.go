@@ -45,20 +45,17 @@ func GenerateUniversalDockerfile() (string, error) {
 	sb.WriteString("        CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags=\"-s -w\" -o /app/bin/$bin ./cmd/$bin; \\\n")
 	sb.WriteString("      fi; \\\n")
 	sb.WriteString("    done\n\n")
-	sb.WriteString("# Runtime base stage (hardened non-root)\n")
-	sb.WriteString("FROM alpine:3.21 AS runtime-base\n")
-	sb.WriteString("RUN apk add --no-cache tzdata ca-certificates && \\\n")
-	sb.WriteString("    addgroup -g 10001 appgroup && \\\n")
-	sb.WriteString("    adduser -u 10001 -G appgroup -D -s /bin/false appuser\n")
+	sb.WriteString("# Runtime base stage (distroless non-root, 0 CVEs, no shell)\n")
+	sb.WriteString("FROM gcr.io/distroless/static-debian12:nonroot AS runtime-base\n")
 	sb.WriteString("WORKDIR /app\n\n")
 
 	// Generate target stages for each detected flavor
 	for _, target := range targets {
 		sb.WriteString(fmt.Sprintf("# Target: %s\n", target))
 		sb.WriteString(fmt.Sprintf("FROM runtime-base AS %s\n", target))
-		sb.WriteString(fmt.Sprintf("COPY --from=builder --chown=10001:10001 /app/bin/%s /app/bin/%s\n", target, target))
-		sb.WriteString(fmt.Sprintf("RUN ln -s /app/bin/%s /app/%s\n", target, target))
-		sb.WriteString("USER 10001:10001\n")
+		sb.WriteString(fmt.Sprintf("COPY --from=builder --chown=nonroot:nonroot /app/bin/%s /app/bin/%s\n", target, target))
+		sb.WriteString(fmt.Sprintf("COPY --from=builder --chown=nonroot:nonroot /app/bin/%s /app/%s\n", target, target))
+		sb.WriteString("USER nonroot:nonroot\n")
 		sb.WriteString("EXPOSE 8080\n")
 		sb.WriteString(fmt.Sprintf("CMD [\"/app/bin/%s\"]\n\n", target))
 	}
@@ -67,8 +64,8 @@ func GenerateUniversalDockerfile() (string, error) {
 	sb.WriteString("# Target: app (generic parameterized by TARGET build arg)\n")
 	sb.WriteString("FROM runtime-base AS app\n")
 	sb.WriteString("ARG TARGET=api\n")
-	sb.WriteString("COPY --from=builder --chown=10001:10001 /app/bin/${TARGET} /app/entrypoint\n")
-	sb.WriteString("USER 10001:10001\n")
+	sb.WriteString("COPY --from=builder --chown=nonroot:nonroot /app/bin/${TARGET} /app/entrypoint\n")
+	sb.WriteString("USER nonroot:nonroot\n")
 	sb.WriteString("EXPOSE 8080\n")
 	sb.WriteString("CMD [\"/app/entrypoint\"]\n")
 
