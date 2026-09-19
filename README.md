@@ -71,6 +71,23 @@ Make sure `$GOPATH/bin` is on your `PATH`:
 export PATH="$HOME/go/bin:$PATH"
 ```
 
+### Prebuilt binaries
+
+Every tagged release publishes binaries for Linux, macOS and Windows (amd64 and arm64) on the [Releases page](https://github.com/jmoyonero/godev/releases), together with a `checksums.txt`. Download the archive for your platform, extract it and move `godev` somewhere on your `PATH`.
+
+Check the installed version with:
+```bash
+godev version
+```
+
+### Releasing (maintainers)
+
+Releases are built by [GoReleaser](https://goreleaser.com) from `.goreleaser.yaml`, which injects the version, commit and build date into the binary. Pushing a `v*` tag triggers the `Release` workflow:
+```bash
+git tag v0.3.0 && git push origin v0.3.0
+```
+To test the release locally without publishing: `go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean`.
+
 ### Requirements
 
 - **Go 1.27+.** `golangci-lint` (at the `lint.version` version), `gosec` and `govulncheck` run through `go run`, with no manual install. `godev generate` uses the `mockgen` from `go.uber.org/mock` declared in the microservice's `go.mod`.
