@@ -9,6 +9,8 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-19
+
 ### Fixed
 - `godev run --reset-db` and `godev e2e` with seeds no longer tear down and restart the stack they had just brought up.
 - `godev run` exits with an error when a service crashes, instead of stopping everything with status 0.
@@ -116,7 +118,8 @@ Release notes with full commit lists are also published on the
 - First release of the `godev` CLI: lint, security analysis, tests, local infrastructure and Robot Framework E2E orchestration.
 - Shared E2E environment variables, `pg_isready` health check and seeds loaded through stdin.
 
-[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jmoyonero/godev/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jmoyonero/godev/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jmoyonero/godev/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jmoyonero/godev/compare/v0.1.7...v0.2.0
