@@ -17,7 +17,10 @@ type ComposeConfig struct {
 }
 
 type ComposeService struct {
-	Image         string            `yaml:"image"`
+	Image string `yaml:"image"`
+	// Deliberately left unset when generating a compose file: every godev stack runs under
+	// the same generic project, and container_name is a daemon-wide name, so a container
+	// left behind by another repo would block this one from starting.
 	ContainerName string            `yaml:"container_name,omitempty"`
 	Restart       string            `yaml:"restart,omitempty"`
 	Environment   map[string]string `yaml:"environment,omitempty"`
@@ -136,9 +139,8 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 		compose.Volumes[volName] = nil
 
 		compose.Services["db"] = ComposeService{
-			Image:         "postgres:18-alpine",
-			ContainerName: fmt.Sprintf("%s-db", projectName),
-			Restart:       "always",
+			Image:   "postgres:18-alpine",
+			Restart: "always",
 			Environment: map[string]string{
 				"POSTGRES_USER":     dbUser,
 				"POSTGRES_PASSWORD": dbPassword,
@@ -166,10 +168,9 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 		}
 
 		svc := ComposeService{
-			Image:         "wiremock/wiremock:3.9.1",
-			ContainerName: fmt.Sprintf("%s-wiremock", projectName),
-			Restart:       "unless-stopped",
-			Ports:         []string{fmt.Sprintf("%d:8080", wiremockPort)},
+			Image:   "wiremock/wiremock:3.9.1",
+			Restart: "unless-stopped",
+			Ports:   []string{fmt.Sprintf("%d:8080", wiremockPort)},
 			Command: []string{
 				"--global-response-templating",
 				"--verbose",
@@ -194,9 +195,8 @@ func GenerateDynamicCompose(cfg *config.Config) (string, error) {
 	// 3. Jaeger tracing service
 	if servicesToEnable["jaeger"] || servicesToEnable["tracing"] {
 		compose.Services["jaeger"] = ComposeService{
-			Image:         "jaegertracing/all-in-one:latest",
-			ContainerName: fmt.Sprintf("%s-jaeger", projectName),
-			Restart:       "unless-stopped",
+			Image:   "jaegertracing/all-in-one:latest",
+			Restart: "unless-stopped",
 			Environment: map[string]string{
 				"COLLECTOR_OTLP_ENABLED": "true",
 			},
@@ -258,9 +258,8 @@ service:
 		}
 
 		compose.Services["otel-collector"] = ComposeService{
-			Image:         "otel/opentelemetry-collector-contrib:latest",
-			ContainerName: fmt.Sprintf("%s-otel-collector", projectName),
-			Restart:       "unless-stopped",
+			Image:   "otel/opentelemetry-collector-contrib:latest",
+			Restart: "unless-stopped",
 			Command: []string{
 				"--config=/etc/otel-collector-config.yaml",
 			},
@@ -297,9 +296,8 @@ scrape_configs:
 		}
 
 		compose.Services["prometheus"] = ComposeService{
-			Image:         "prom/prometheus:latest",
-			ContainerName: fmt.Sprintf("%s-prometheus", projectName),
-			Restart:       "unless-stopped",
+			Image:   "prom/prometheus:latest",
+			Restart: "unless-stopped",
 			Ports: []string{
 				fmt.Sprintf("%d:9090", promPort),
 			},
@@ -382,9 +380,8 @@ providers:
 		}
 
 		compose.Services["grafana"] = ComposeService{
-			Image:         "grafana/grafana:latest",
-			ContainerName: fmt.Sprintf("%s-grafana", projectName),
-			Restart:       "unless-stopped",
+			Image:   "grafana/grafana:latest",
+			Restart: "unless-stopped",
 			Environment: map[string]string{
 				"GF_AUTH_ANONYMOUS_ENABLED":  "true",
 				"GF_AUTH_ANONYMOUS_ORG_ROLE": "Admin",
@@ -403,8 +400,6 @@ providers:
 	if err != nil {
 		return "", fmt.Errorf("error serializando compose dinámico: %w", err)
 	}
-
-
 
 	composePath := filepath.Join(tmpDir, fmt.Sprintf("docker-compose-%s.yaml", projectName))
 	if err := os.WriteFile(composePath, data, 0644); err != nil {

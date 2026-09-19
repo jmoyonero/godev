@@ -45,7 +45,7 @@ export PATH="$HOME/go/bin:$PATH"
 | `godev lint [--fix]` | Ejecuta `golangci-lint` con la versión fijada centralmente (soporta `--fix` para correcciones automáticas). |
 | `godev sec` | Ejecuta análisis estático de seguridad SAST con `gosec` (excluyendo automáticamente código generado o mocks). |
 | `godev vulncheck` | Escanea vulnerabilidades conocidas (CVEs) en las dependencias del proyecto con `govulncheck`. |
-| `godev test [--race] [--shuffle] [--format] [--plain] [--cover] [--html]` | Ejecuta tests unitarios en Go con flags configurables (`-race`, `-shuffle=on`). Si [`gotestsum`](https://github.com/gotestyourself/gotestsum) está instalado (`go install gotest.tools/gotestsum@latest`) formatea la salida con colores y resumen de fallos; `--format` (o `test.format`) elige el formato (`testname` por defecto, `pkgname`, `dots`, `testdox`, `pkgname-and-test-fails`...). Sin gotestsum, o con `--plain`, usa `go test -v`. Con `--cover` (o `test.cover: true`) escribe el perfil de cobertura (`coverage.out`, o `--cover-profile` / `test.cover_profile`) y muestra el total al terminar; `--html` abre además el informe por líneas en el navegador. La cobertura solo se informa si los tests pasan. |
+| `godev test [--race] [--shuffle]` | Ejecuta tests unitarios en Go con flags configurables (`-race`, `-shuffle=on`). |
 
 ### 2. Infraestructura Local (Docker Compose)
 
@@ -73,13 +73,12 @@ godev run --reset-db  # Aplica seeds.sql en la base de datos antes de arrancar
 
 | Comando | Descripción |
 | :--- | :--- |
-| `godev e2e` (o `godev robot`) | **Orquestador inteligente E2E:**<br>1. Levanta la infraestructura (Docker Compose) si no estaba corriendo.<br>2. Restaura base de datos con seeds.<br>3. Crea y configura el virtualenv de Python (`.venv`) e instala `requirements.txt` si no existe.<br>4. Libera puertos en uso.<br>5. Compila y arranca en background los servicios necesarios con sus variables de entorno.<br>6. Espera con healthcheck polling activo.<br>7. Ejecuta Robot Framework.<br>8. Abre automáticamente el reporte HTML en Google Chrome.<br>9. Garantiza el apagado y limpieza de procesos y binarios al terminar o al recibir Ctrl+C, y apaga la infraestructura que él mismo levantó (la que ya estaba arriba se deja como estaba). |
+| `godev e2e` (o `godev robot`) | **Orquestador inteligente E2E:**<br>1. Destruye la infraestructura local previa (sea del proyecto que sea) y levanta la de este.<br>2. Restaura base de datos con seeds si el repo los define.<br>3. Crea y configura el virtualenv de Python (`.venv`) e instala `requirements.txt` si no existe.<br>4. Libera puertos en uso.<br>5. Compila y arranca en background los servicios necesarios con sus variables de entorno.<br>6. Espera con healthcheck polling activo.<br>7. Ejecuta Robot Framework.<br>8. Abre automáticamente el reporte HTML en Google Chrome.<br>9. Destruye contenedores, procesos y binarios al terminar, pasen o fallen los tests, o al recibir Ctrl+C (salvo los contenedores con `--keep-infra`). |
 
 Opciones adicionales:
 ```bash
 godev e2e --no-browser    # No abre el reporte en el navegador
-godev e2e --stop-infra    # Destruye los contenedores (-v) al terminar, aunque ya estuvieran levantados
-godev e2e --keep-infra    # No apaga la infraestructura que levantó e2e (para repetir ejecuciones)
+godev e2e --keep-infra    # No destruye la infraestructura al terminar (para repetir ejecuciones)
 godev e2e --suite ruta/   # Ejecuta una suite específica
 ```
 
@@ -118,9 +117,6 @@ test:
   path: "./internal/..."
   race: true
   shuffle: "on"
-  format: "testname"   # formato de gotestsum, si está instalado
-  cover: false         # true: genera el perfil y muestra el total en cada `godev test`
-  cover_profile: "coverage.out"
 
 e2e:
   enabled: true

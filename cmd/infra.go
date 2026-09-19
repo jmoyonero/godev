@@ -38,24 +38,10 @@ var infraUpCmd = &cobra.Command{
 			return fmt.Errorf("error resolviendo infraestructura: %w", err)
 		}
 
-		cmdArgs := []string{"compose", "-f", composeFile, "up", "-d"}
-		if len(args) > 0 {
-			cmdArgs = append(cmdArgs, args...)
-		}
-
-		ui.Step("🐳 Levantando contenedores de infraestructura (%s)...", composeFile)
-		if err := execx.Run("docker", cmdArgs...); err != nil {
-			return err
-		}
-
-		// Esperar disponibilidad de BBDD y servicios si aplican
-		ui.Dim("Comprobando disponibilidad de servicios...")
-		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
-		wiremockPort := cfg.Infra.WireMockPort
-		if wiremockPort == 0 {
-			wiremockPort = 8090
-		}
-		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
+		// Una sola infra local viva a la vez: se destruye lo que hubiera bajo el nombre de
+		// proyecto genérico (sea de este repo o de otro) y se levanta el compose de este
+		// bajo ese mismo nombre.
+		infra.TearDownManagedStack()
 
 		servicesMap := make(map[string]bool)
 		for _, s := range cfg.Infra.Services {
@@ -68,25 +54,48 @@ var infraUpCmd = &cobra.Command{
 			servicesMap["otel-collector"] = true
 		}
 
+		wiremockPort := cfg.Infra.WireMockPort
+		if wiremockPort == 0 {
+			wiremockPort = 8090
+		}
 		promPort := cfg.Infra.PrometheusPort
 		if promPort == 0 {
 			promPort = 9090
 		}
-		if servicesMap["prometheus"] {
-			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/-/ready", promPort), 5*time.Second)
-		}
-
 		grafanaPort := cfg.Infra.GrafanaPort
 		if grafanaPort == 0 {
 			grafanaPort = 3000
 		}
-		if servicesMap["grafana"] {
-			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/api/health", grafanaPort), 5*time.Second)
+		otelPort := cfg.Infra.OtelPort
+		if otelPort == 0 {
+			otelPort = 4317
 		}
-
 		dbPort := cfg.Infra.DbPort
 		if dbPort == 0 {
 			dbPort = 5432
+		}
+
+		cmdArgs := []string{"compose", "-f", composeFile, "-p", infra.ManagedProject, "up", "-d"}
+		if len(args) > 0 {
+			cmdArgs = append(cmdArgs, args...)
+		}
+
+		ui.Step("🐳 Levantando contenedores de infraestructura (%s)...", composeFile)
+		if err := execx.Run("docker", cmdArgs...); err != nil {
+			return err
+		}
+
+		// Esperar disponibilidad de BBDD y servicios si aplican
+		ui.Dim("Comprobando disponibilidad de servicios...")
+		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
+		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
+
+		if servicesMap["prometheus"] {
+			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/-/ready", promPort), 5*time.Second)
+		}
+
+		if servicesMap["grafana"] {
+			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/api/health", grafanaPort), 5*time.Second)
 		}
 
 		ui.Success("Contenedores iniciados y listos para su uso:")
@@ -98,10 +107,6 @@ var infraUpCmd = &cobra.Command{
 			ui.Info("  🔍 Jaeger:         http://localhost:16686")
 		}
 		if servicesMap["otel-collector"] || servicesMap["collector"] {
-			otelPort := cfg.Infra.OtelPort
-			if otelPort == 0 {
-				otelPort = 4317
-			}
 			ui.Info("  📡 OTel Collector: localhost:%d (OTLP gRPC)", otelPort)
 		}
 		if servicesMap["prometheus"] {
@@ -128,7 +133,7 @@ var infraDownCmd = &cobra.Command{
 			return fmt.Errorf("error resolviendo infraestructura: %w", err)
 		}
 
-		cmdArgs := []string{"compose", "-f", composeFile, "down"}
+		cmdArgs := []string{"compose", "-f", composeFile, "-p", infra.ManagedProject, "down"}
 		if downVolumes {
 			cmdArgs = append(cmdArgs, "-v")
 			ui.Step("🛑 Deteniendo contenedores y eliminando volúmenes (-v)...")
@@ -167,7 +172,7 @@ var infraResetDbCmd = &cobra.Command{
 
 		ui.Step("🌱 Ejecutando seeds (%s) en servicio '%s' (BBDD '%s')...", seedsFile, cfg.Infra.DbService, cfg.Infra.DbName)
 
-		c := exec.Command("docker", "compose", "-f", composeFile, "exec", "-T", cfg.Infra.DbService,
+		c := exec.Command("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject, "exec", "-T", cfg.Infra.DbService,
 			"psql", "-U", cfg.Infra.DbUser, "-d", cfg.Infra.DbName)
 		c.Stdin = bytes.NewReader(seedsData)
 		c.Stdout = os.Stdout
@@ -196,15 +201,15 @@ var infraPsCmd = &cobra.Command{
 			return fmt.Errorf("error resolviendo infraestructura: %w", err)
 		}
 
-		return execx.Run("docker", "compose", "-f", composeFile, "ps")
+		return execx.Run("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject, "ps")
 	},
 }
 
 func waitForPgReady(composeFile, dbService, dbUser, dbName string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		cmd := exec.Command("docker", "compose", "-f", composeFile, "exec", "-T", dbService,
-			"pg_isready", "-U", dbUser, "-d", dbName)
+		cmd := exec.Command("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject,
+			"exec", "-T", dbService, "pg_isready", "-U", dbUser, "-d", dbName)
 		if err := cmd.Run(); err == nil {
 			return nil
 		}
