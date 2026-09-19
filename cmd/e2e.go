@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
+	"github.com/jmoyonero/godev/pkg/infra"
 	"github.com/jmoyonero/godev/pkg/ui"
 	"github.com/spf13/cobra"
 )
@@ -19,6 +21,7 @@ import (
 var (
 	e2eNoBrowser bool
 	e2eStopInfra bool
+	e2eKeepInfra bool
 	e2eSuiteDir  string
 )
 
@@ -26,9 +29,12 @@ var e2eCmd = &cobra.Command{
 	Use:     "e2e",
 	Aliases: []string{"robot"},
 	Short:   "Orquesta la suite de pruebas End-to-End con Robot Framework",
-	Long: `Prepara el entorno virtual de Python, compila e inicia los servicios en background,
-espera a sus healthchecks, ejecuta Robot Framework y abre el reporte en Google Chrome.
-Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
+	Long: `Levanta la infraestructura (Docker Compose) si no estaba ya corriendo, prepara el entorno
+virtual de Python, compila e inicia los servicios en background, espera a sus healthchecks,
+ejecuta Robot Framework y abre el reporte en Google Chrome.
+Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C. La infraestructura
+que levantó el propio e2e se apaga al terminar (salvo con --keep-infra); la que ya estaba
+levantada se deja como estaba (salvo con --stop-infra).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -37,9 +43,22 @@ Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
 
 		ui.Header("SUITE END-TO-END (ROBOT FRAMEWORK)")
 
-		// 1. Restaurar BBDD con seeds si existe configuración infra
+		// 1. Infraestructura: levantarla si no estaba corriendo
+		startedInfra, err := ensureInfra(cmd, cfg)
+		if err != nil {
+			return err
+		}
+		if shouldStopInfra(e2eStopInfra, startedInfra, e2eKeepInfra) {
+			// Registrado el primero: se ejecuta el último, tras parar los servicios.
+			defer func() {
+				downVolumes = true
+				_ = infraDownCmd.RunE(cmd, nil)
+			}()
+		}
+
+		// Restaurar BBDD con seeds si existe configuración infra
 		if cfg.Infra.SeedsFile != "" && fileExists(cfg.Infra.SeedsFile) {
-			ui.Step("1. Restaurando base de datos con seeds...")
+			ui.Step("   Restaurando base de datos con seeds...")
 			if err := infraResetDbCmd.RunE(cmd, nil); err != nil {
 				return fmt.Errorf("falló la restauración de BBDD previa a e2e: %w", err)
 			}
@@ -105,10 +124,6 @@ Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
 			}
 			for _, bin := range tempBinaries {
 				_ = os.Remove(bin)
-			}
-			if e2eStopInfra {
-				downVolumes = true
-				_ = infraDownCmd.RunE(cmd, nil)
 			}
 		}
 		defer cleanupServices()
@@ -194,6 +209,42 @@ Garantiza el apagado y limpieza de procesos incluso al cancelar con Ctrl+C.`,
 	},
 }
 
+// ensureInfra brings the infrastructure up unless it is already running, and
+// reports whether it had to start it.
+func ensureInfra(cmd *cobra.Command, cfg *config.Config) (started bool, err error) {
+	composeFile, err := infra.ResolveComposeFile(cfg)
+	if err != nil {
+		return false, fmt.Errorf("error resolviendo infraestructura: %w", err)
+	}
+
+	// A failing "ps" (no project yet, docker missing) reads as "not running":
+	// the "up" below then reports the real problem.
+	out, _ := exec.Command("docker", "compose", "-f", composeFile, "ps", "--status", "running", "-q").Output()
+	if infraIsRunning(string(out)) {
+		ui.Step("1. Infraestructura ya levantada; se deja como está.")
+		return false, nil
+	}
+
+	ui.Step("1. Levantando la infraestructura...")
+	if err := infraUpCmd.RunE(cmd, nil); err != nil {
+		return true, fmt.Errorf("falló el arranque de la infraestructura: %w", err)
+	}
+	return true, nil
+}
+
+// infraIsRunning reports whether "docker compose ps --status running -q"
+// listed at least one container.
+func infraIsRunning(psOutput string) bool {
+	return strings.TrimSpace(psOutput) != ""
+}
+
+// shouldStopInfra decides whether e2e tears the infrastructure down when it
+// finishes: always with --stop-infra, and otherwise when e2e itself started it
+// (unless --keep-infra).
+func shouldStopInfra(stopFlag, startedByE2E, keepFlag bool) bool {
+	return stopFlag || (startedByE2E && !keepFlag)
+}
+
 func fileExists(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && !info.IsDir()
@@ -201,7 +252,8 @@ func fileExists(p string) bool {
 
 func init() {
 	e2eCmd.Flags().BoolVar(&e2eNoBrowser, "no-browser", false, "No abrir el reporte en el navegador al terminar")
-	e2eCmd.Flags().BoolVar(&e2eStopInfra, "stop-infra", false, "Detiene y destruye contenedores (-v) al terminar")
+	e2eCmd.Flags().BoolVar(&e2eStopInfra, "stop-infra", false, "Detiene y destruye contenedores (-v) al terminar, aunque ya estuvieran levantados")
+	e2eCmd.Flags().BoolVar(&e2eKeepInfra, "keep-infra", false, "No apaga la infraestructura que levantó e2e (útil para repetir ejecuciones)")
 	e2eCmd.Flags().StringVar(&e2eSuiteDir, "suite", "", "Directorio específico de suites a ejecutar")
 	rootCmd.AddCommand(e2eCmd)
 }
