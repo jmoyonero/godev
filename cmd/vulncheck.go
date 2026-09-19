@@ -10,17 +10,17 @@ import (
 
 var vulncheckCmd = &cobra.Command{
 	Use:   "vulncheck",
-	Short: "Comprueba vulnerabilidades conocidas en dependencias con govulncheck",
+	Short: "Checks dependencies for known vulnerabilities with govulncheck",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ui.Step("🛡️  Comprobando vulnerabilidades conocidas con govulncheck...")
+		ui.Step("🛡️  Checking for known vulnerabilities with govulncheck...")
 
 		cmdArgs := []string{"run", "golang.org/x/vuln/cmd/govulncheck@latest", "./..."}
 
 		if err := execx.Run("go", cmdArgs...); err != nil {
-			return fmt.Errorf("govulncheck detectó vulnerabilidades o falló: %w", err)
+			return fmt.Errorf("govulncheck found vulnerabilities or failed: %w", err)
 		}
 
-		ui.Success("No se encontraron vulnerabilidades conocidas en las dependencias.")
+		ui.Success("No known vulnerabilities found in the dependencies.")
 		return nil
 	},
 }

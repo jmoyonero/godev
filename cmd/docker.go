@@ -23,7 +23,7 @@ var (
 
 var dockerfileCmd = &cobra.Command{
 	Use:   "dockerfile",
-	Short: "Genera el Dockerfile universal para el proyecto basado en cmd/",
+	Short: "Generates the project's universal Dockerfile based on cmd/",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		content, err := docker.GenerateUniversalDockerfile()
 		if err != nil {
@@ -32,9 +32,9 @@ var dockerfileCmd = &cobra.Command{
 
 		if dockerfileWrite {
 			if err := os.WriteFile("Dockerfile", []byte(content), 0644); err != nil {
-				return fmt.Errorf("error escribiendo Dockerfile: %w", err)
+				return fmt.Errorf("error writing Dockerfile: %w", err)
 			}
-			ui.Success("Dockerfile universal generado con éxito en ./Dockerfile")
+			ui.Success("Universal Dockerfile generated successfully at ./Dockerfile")
 			return nil
 		}
 
@@ -46,7 +46,7 @@ var dockerfileCmd = &cobra.Command{
 var buildImageCmd = &cobra.Command{
 	Use:     "build-image",
 	Aliases: []string{"docker-build"},
-	Short:   "Construye la imagen Docker en local usando el Dockerfile universal embebido",
+	Short:   "Builds the Docker image locally using the embedded universal Dockerfile",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		content, err := docker.GenerateUniversalDockerfile()
 		if err != nil {
@@ -60,7 +60,7 @@ var buildImageCmd = &cobra.Command{
 			buildTag = fmt.Sprintf("%s:latest", buildTarget)
 		}
 
-		ui.Step("🐳 Construyendo imagen '%s' (target: %s) desde Dockerfile universal...", buildTag, buildTarget)
+		ui.Step("🐳 Building image '%s' (target: %s) from the universal Dockerfile...", buildTag, buildTarget)
 
 		buildArgs := []string{
 			"build",
@@ -75,7 +75,7 @@ var buildImageCmd = &cobra.Command{
 
 		keyB64, source := resolveSSHDeployKey(sshKeyPath)
 		if keyB64 != "" {
-			ui.Info("🔑 Credencial SSH detectada para repositorios privados (%s)", source)
+			ui.Info("🔑 SSH credential detected for private repositories (%s)", source)
 			buildArgs = append(buildArgs, "--build-arg", fmt.Sprintf("SSH_DEPLOY_KEY_B64=%s", keyB64))
 		}
 
@@ -87,10 +87,10 @@ var buildImageCmd = &cobra.Command{
 		c.Stderr = os.Stderr
 
 		if err := c.Run(); err != nil {
-			return fmt.Errorf("falló la construcción de la imagen docker: %w", err)
+			return fmt.Errorf("docker image build failed: %w", err)
 		}
 
-		ui.Success("Imagen '%s' construida exitosamente.", buildTag)
+		ui.Success("Image '%s' built successfully.", buildTag)
 		return nil
 	},
 }
@@ -127,12 +127,12 @@ func resolveSSHDeployKey(explicitKeyPath string) (string, string) {
 }
 
 func init() {
-	dockerfileCmd.Flags().BoolVarP(&dockerfileWrite, "write", "w", false, "Escribe el contenido en ./Dockerfile")
+	dockerfileCmd.Flags().BoolVarP(&dockerfileWrite, "write", "w", false, "Writes the content to ./Dockerfile")
 
-	buildImageCmd.Flags().StringVarP(&buildTarget, "target", "t", "api", "Sabor o target a construir (ej. api, scheduler)")
-	buildImageCmd.Flags().StringVarP(&buildTag, "tag", "i", "", "Tag de la imagen resultante (ej. mi-app:latest)")
-	buildImageCmd.Flags().StringVar(&sshKeyPath, "ssh-key", "", "Ruta a la clave SSH privada para módulos privados (autodetecta ~/.ssh/id_ed25519)")
-	buildImageCmd.Flags().BoolVar(&noCache, "no-cache", false, "Fuerza la construcción sin usar la caché de Docker")
+	buildImageCmd.Flags().StringVarP(&buildTarget, "target", "t", "api", "Flavor or target to build (e.g. api, scheduler)")
+	buildImageCmd.Flags().StringVarP(&buildTag, "tag", "i", "", "Tag of the resulting image (e.g. my-app:latest)")
+	buildImageCmd.Flags().StringVar(&sshKeyPath, "ssh-key", "", "Path to the private SSH key for private modules (auto-detects ~/.ssh/id_ed25519)")
+	buildImageCmd.Flags().BoolVar(&noCache, "no-cache", false, "Forces the build without using the Docker cache")
 
 	rootCmd.AddCommand(dockerfileCmd)
 	rootCmd.AddCommand(buildImageCmd)

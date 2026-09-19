@@ -21,12 +21,12 @@ var (
 
 var infraCmd = &cobra.Command{
 	Use:   "infra",
-	Short: "Gestión de infraestructura local con Docker Compose",
+	Short: "Local infrastructure management with Docker Compose",
 }
 
 var infraUpCmd = &cobra.Command{
-	Use:   "up [servicios...]",
-	Short: "Levanta los contenedores en segundo plano y espera a que estén listos",
+	Use:   "up [services...]",
+	Short: "Starts the containers in the background and waits until they are ready",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -35,12 +35,12 @@ var infraUpCmd = &cobra.Command{
 
 		composeFile, err := infra.ResolveComposeFile(cfg)
 		if err != nil {
-			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+			return fmt.Errorf("error resolving infrastructure: %w", err)
 		}
 
-		// Una sola infra local viva a la vez: se destruye lo que hubiera bajo el nombre de
-		// proyecto genérico (sea de este repo o de otro) y se levanta el compose de este
-		// bajo ese mismo nombre.
+		// Only one local infra alive at a time: whatever was running under the generic
+		// project name (from this repo or another) is destroyed and this repo's compose
+		// is brought up under that same name.
 		infra.TearDownManagedStack()
 
 		servicesMap := make(map[string]bool)
@@ -80,13 +80,13 @@ var infraUpCmd = &cobra.Command{
 			cmdArgs = append(cmdArgs, args...)
 		}
 
-		ui.Step("🐳 Levantando contenedores de infraestructura (%s)...", composeFile)
+		ui.Step("🐳 Starting infrastructure containers (%s)...", composeFile)
 		if err := execx.Run("docker", cmdArgs...); err != nil {
 			return err
 		}
 
-		// Esperar disponibilidad de BBDD y servicios si aplican
-		ui.Dim("Comprobando disponibilidad de servicios...")
+		// Wait for the database and services to be available, if applicable
+		ui.Dim("Checking service availability...")
 		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
 		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
 
@@ -98,8 +98,8 @@ var infraUpCmd = &cobra.Command{
 			_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/api/health", grafanaPort), 5*time.Second)
 		}
 
-		ui.Success("Contenedores iniciados y listos para su uso:")
-		ui.Info("  🗄️  PostgreSQL:     localhost:%d (BBDD '%s')", dbPort, cfg.Infra.DbName)
+		ui.Success("Containers started and ready to use:")
+		ui.Info("  🗄️  PostgreSQL:     localhost:%d (database '%s')", dbPort, cfg.Infra.DbName)
 		if len(cfg.Infra.Services) == 0 || servicesMap["wiremock"] {
 			ui.Info("  🎭 WireMock:       http://localhost:%d", wiremockPort)
 		}
@@ -121,7 +121,7 @@ var infraUpCmd = &cobra.Command{
 
 var infraDownCmd = &cobra.Command{
 	Use:   "down",
-	Short: "Detiene y destruye los contenedores",
+	Short: "Stops and destroys the containers",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -130,15 +130,15 @@ var infraDownCmd = &cobra.Command{
 
 		composeFile, err := infra.ResolveComposeFile(cfg)
 		if err != nil {
-			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+			return fmt.Errorf("error resolving infrastructure: %w", err)
 		}
 
 		cmdArgs := []string{"compose", "-f", composeFile, "-p", infra.ManagedProject, "down"}
 		if downVolumes {
 			cmdArgs = append(cmdArgs, "-v")
-			ui.Step("🛑 Deteniendo contenedores y eliminando volúmenes (-v)...")
+			ui.Step("🛑 Stopping containers and removing volumes (-v)...")
 		} else {
-			ui.Step("🛑 Deteniendo contenedores...")
+			ui.Step("🛑 Stopping containers...")
 		}
 
 		return execx.Run("docker", cmdArgs...)
@@ -147,7 +147,7 @@ var infraDownCmd = &cobra.Command{
 
 var infraResetDbCmd = &cobra.Command{
 	Use:   "reset-db",
-	Short: "Restaura la base de datos aplicando el script de datos semilla (seeds.sql)",
+	Short: "Restores the database by applying the seed data script (seeds.sql)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -156,10 +156,10 @@ var infraResetDbCmd = &cobra.Command{
 
 		composeFile, err := infra.ResolveComposeFile(cfg)
 		if err != nil {
-			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+			return fmt.Errorf("error resolving infrastructure: %w", err)
 		}
 
-		// 1. Asegurar que la infra esté levantada
+		// 1. Make sure the infra is up
 		if err := infraUpCmd.RunE(cmd, nil); err != nil {
 			return err
 		}
@@ -167,10 +167,10 @@ var infraResetDbCmd = &cobra.Command{
 		seedsFile := cfg.Infra.SeedsFile
 		seedsData, err := os.ReadFile(seedsFile)
 		if err != nil {
-			return fmt.Errorf("no se pudo leer el archivo de seeds %s: %w", seedsFile, err)
+			return fmt.Errorf("could not read the seeds file %s: %w", seedsFile, err)
 		}
 
-		ui.Step("🌱 Ejecutando seeds (%s) en servicio '%s' (BBDD '%s')...", seedsFile, cfg.Infra.DbService, cfg.Infra.DbName)
+		ui.Step("🌱 Running seeds (%s) on service '%s' (database '%s')...", seedsFile, cfg.Infra.DbService, cfg.Infra.DbName)
 
 		c := exec.Command("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject, "exec", "-T", cfg.Infra.DbService,
 			"psql", "-U", cfg.Infra.DbUser, "-d", cfg.Infra.DbName)
@@ -179,17 +179,17 @@ var infraResetDbCmd = &cobra.Command{
 		c.Stderr = os.Stderr
 
 		if err := c.Run(); err != nil {
-			return fmt.Errorf("error ejecutando seeds psql: %w", err)
+			return fmt.Errorf("error running psql seeds: %w", err)
 		}
 
-		ui.Success("Base de datos restaurada al estado inicial con seeds.")
+		ui.Success("Database restored to its initial state with seeds.")
 		return nil
 	},
 }
 
 var infraPsCmd = &cobra.Command{
 	Use:   "ps",
-	Short: "Muestra el estado de los contenedores",
+	Short: "Shows the status of the containers",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -198,7 +198,7 @@ var infraPsCmd = &cobra.Command{
 
 		composeFile, err := infra.ResolveComposeFile(cfg)
 		if err != nil {
-			return fmt.Errorf("error resolviendo infraestructura: %w", err)
+			return fmt.Errorf("error resolving infrastructure: %w", err)
 		}
 
 		return execx.Run("docker", "compose", "-f", composeFile, "-p", infra.ManagedProject, "ps")
@@ -215,11 +215,11 @@ func waitForPgReady(composeFile, dbService, dbUser, dbName string, timeout time.
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	return fmt.Errorf("timeout esperando disponibilidad de postgres")
+	return fmt.Errorf("timed out waiting for postgres to be available")
 }
 
 func init() {
-	infraDownCmd.Flags().BoolVarP(&downVolumes, "volumes", "v", false, "Elimina también volúmenes de datos")
+	infraDownCmd.Flags().BoolVarP(&downVolumes, "volumes", "v", false, "Also removes data volumes")
 
 	infraCmd.AddCommand(infraUpCmd)
 	infraCmd.AddCommand(infraDownCmd)

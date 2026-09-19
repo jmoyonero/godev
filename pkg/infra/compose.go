@@ -254,7 +254,7 @@ service:
 
 		otelConfigFile := filepath.Join(projectTmpDir, "otel-collector-config.yaml")
 		if err := os.WriteFile(otelConfigFile, []byte(otelConfig.String()), 0644); err != nil {
-			return "", fmt.Errorf("error escribiendo config otel-collector: %w", err)
+			return "", fmt.Errorf("error writing otel-collector config: %w", err)
 		}
 
 		compose.Services["otel-collector"] = ComposeService{
@@ -292,7 +292,7 @@ scrape_configs:
 `
 		promConfigFile := filepath.Join(projectTmpDir, "prometheus.yml")
 		if err := os.WriteFile(promConfigFile, []byte(promConfig), 0644); err != nil {
-			return "", fmt.Errorf("error escribiendo config prometheus: %w", err)
+			return "", fmt.Errorf("error writing prometheus config: %w", err)
 		}
 
 		compose.Services["prometheus"] = ComposeService{
@@ -348,7 +348,7 @@ datasources:
 
 		dsFile := filepath.Join(grafanaDsDir, "datasources.yaml")
 		if err := os.WriteFile(dsFile, []byte(datasources.String()), 0644); err != nil {
-			return "", fmt.Errorf("error escribiendo datasources de grafana: %w", err)
+			return "", fmt.Errorf("error writing grafana datasources: %w", err)
 		}
 
 		dashboardsYaml := `apiVersion: 1
@@ -366,17 +366,17 @@ providers:
 `
 		dashConfigFile := filepath.Join(grafanaDashDir, "dashboards.yaml")
 		if err := os.WriteFile(dashConfigFile, []byte(dashboardsYaml), 0644); err != nil {
-			return "", fmt.Errorf("error escribiendo dashboards.yaml de grafana: %w", err)
+			return "", fmt.Errorf("error writing grafana dashboards.yaml: %w", err)
 		}
 
 		dashJSONFile := filepath.Join(grafanaDashDir, "http-client-telemetry.json")
 		if err := os.WriteFile(dashJSONFile, []byte(httpClientDashboardJSON), 0644); err != nil {
-			return "", fmt.Errorf("error escribiendo dashboard json de grafana: %w", err)
+			return "", fmt.Errorf("error writing grafana dashboard json: %w", err)
 		}
 
 		dbDashJSONFile := filepath.Join(grafanaDashDir, "database-connection-pool.json")
 		if err := os.WriteFile(dbDashJSONFile, []byte(dbPoolDashboardJSON), 0644); err != nil {
-			return "", fmt.Errorf("error escribiendo dashboard db json de grafana: %w", err)
+			return "", fmt.Errorf("error writing grafana db dashboard json: %w", err)
 		}
 
 		compose.Services["grafana"] = ComposeService{
@@ -398,12 +398,12 @@ providers:
 
 	data, err := yaml.Marshal(compose)
 	if err != nil {
-		return "", fmt.Errorf("error serializando compose dinámico: %w", err)
+		return "", fmt.Errorf("error serializing dynamic compose: %w", err)
 	}
 
 	composePath := filepath.Join(tmpDir, fmt.Sprintf("docker-compose-%s.yaml", projectName))
 	if err := os.WriteFile(composePath, data, 0644); err != nil {
-		return "", fmt.Errorf("error escribiendo compose dinámico en %s: %w", composePath, err)
+		return "", fmt.Errorf("error writing dynamic compose to %s: %w", composePath, err)
 	}
 
 	return composePath, nil

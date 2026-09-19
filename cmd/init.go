@@ -10,12 +10,12 @@ import (
 )
 
 var initCmd = &cobra.Command{
-	Use:   "init [nombre-microservicio]",
-	Short: "Crea una plantilla de configuración .godev.yaml en el directorio actual",
+	Use:   "init [microservice-name]",
+	Short: "Creates a .godev.yaml configuration template in the current directory",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		configFile := config.DefaultConfigFile
 		if _, err := os.Stat(configFile); err == nil {
-			return fmt.Errorf("el archivo %s ya existe en este directorio", configFile)
+			return fmt.Errorf("the file %s already exists in this directory", configFile)
 		}
 
 		var name string
@@ -29,11 +29,11 @@ var initCmd = &cobra.Command{
 		}
 
 		if err := os.WriteFile(configFile, data, 0644); err != nil {
-			return fmt.Errorf("error guardando %s: %w", configFile, err)
+			return fmt.Errorf("error saving %s: %w", configFile, err)
 		}
 
-		ui.Success("Archivo de configuración %s generado exitosamente.", configFile)
-		ui.Info("Puedes personalizar variables, linters y suites en este archivo.")
+		ui.Success("Configuration file %s generated successfully.", configFile)
+		ui.Info("You can customize variables, linters and suites in this file.")
 		return nil
 	},
 }

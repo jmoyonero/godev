@@ -29,7 +29,7 @@ const gotestsumInstallHint = "go install gotest.tools/gotestsum@latest"
 
 var testCmd = &cobra.Command{
 	Use:   "test",
-	Short: "Ejecuta los tests unitarios en Go",
+	Short: "Runs the Go unit tests",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -68,7 +68,7 @@ var testCmd = &cobra.Command{
 			// Resolve packages using go list and filter out excluded directories
 			out, err := exec.Command("go", "list", path).Output()
 			if err != nil {
-				return fmt.Errorf("error al listar paquetes con go list %s: %w", path, err)
+				return fmt.Errorf("error listing packages with go list %s: %w", path, err)
 			}
 			scanner := bufio.NewScanner(bytes.NewReader(out))
 			for scanner.Scan() {
@@ -89,14 +89,14 @@ var testCmd = &cobra.Command{
 				}
 			}
 			if err := scanner.Err(); err != nil {
-				return fmt.Errorf("error al escanear paquetes: %w", err)
+				return fmt.Errorf("error scanning packages: %w", err)
 			}
 		} else {
 			targets = []string{path}
 		}
 
 		if len(targets) == 0 {
-			ui.Step("ℹ️ No hay paquetes para testear tras aplicar los filtros de exclusión.")
+			ui.Step("ℹ️ No packages to test after applying the exclusion filters.")
 			return nil
 		}
 
@@ -129,17 +129,17 @@ var testCmd = &cobra.Command{
 		_, lookErr := exec.LookPath("gotestsum")
 		useGotestsum := !testPlain && lookErr == nil
 		if !testPlain && !useGotestsum {
-			ui.Dim("💡 Instala gotestsum para una salida con colores y resumen: %s", gotestsumInstallHint)
+			ui.Dim("💡 Install gotestsum for colored output with a summary: %s", gotestsumInstallHint)
 		}
 
 		name, args := testCommand(useGotestsum, format, cmdArgs)
 
-		ui.Step("🧪 Ejecutando tests unitarios (%s)...", path)
+		ui.Step("🧪 Running unit tests (%s)...", path)
 		if err := execx.Run(name, args...); err != nil {
-			return fmt.Errorf("fallaron los tests unitarios: %w", err)
+			return fmt.Errorf("unit tests failed: %w", err)
 		}
 
-		ui.Success("Tests unitarios superados exitosamente.")
+		ui.Success("Unit tests passed successfully.")
 
 		if cover {
 			return reportCoverage(profile, testHTML)
@@ -153,17 +153,17 @@ var testCmd = &cobra.Command{
 func reportCoverage(profile string, html bool) error {
 	out, err := exec.Command("go", "tool", "cover", "-func="+profile).Output()
 	if err != nil {
-		return fmt.Errorf("no se pudo leer el perfil de cobertura %s: %w", profile, err)
+		return fmt.Errorf("could not read the coverage profile %s: %w", profile, err)
 	}
 	total, ok := coverageTotal(string(out))
 	if !ok {
-		return fmt.Errorf("el perfil de cobertura %s no contiene un total", profile)
+		return fmt.Errorf("the coverage profile %s contains no total", profile)
 	}
-	ui.Info("📊 Cobertura total: %s (perfil: %s)", total, profile)
+	ui.Info("📊 Total coverage: %s (profile: %s)", total, profile)
 
 	if html {
 		if err := execx.Run("go", "tool", "cover", "-html="+profile); err != nil {
-			return fmt.Errorf("no se pudo abrir el informe HTML de cobertura: %w", err)
+			return fmt.Errorf("could not open the HTML coverage report: %w", err)
 		}
 	}
 	return nil
@@ -192,14 +192,14 @@ func testCommand(useGotestsum bool, format string, goArgs []string) (string, []s
 }
 
 func init() {
-	testCmd.Flags().BoolVar(&testRace, "race", true, "Habilita el detector de condiciones de carrera (-race)")
-	testCmd.Flags().StringVar(&testShuffle, "shuffle", "on", "Orden aleatorio de tests (-shuffle=on)")
-	testCmd.Flags().StringVar(&testPath, "path", "", "Ruta específica de paquetes a testear (ej: ./internal/...)")
-	testCmd.Flags().StringSliceVar(&testExcludeDirs, "exclude-dir", nil, "Directorios o paquetes a excluir (ej: internal/integration)")
-	testCmd.Flags().StringVar(&testFormat, "format", "", "Formato de salida de gotestsum (testname, pkgname, dots, testdox, pkgname-and-test-fails...); por defecto test.format o testname")
-	testCmd.Flags().BoolVar(&testPlain, "plain", false, "Usa 'go test -v' aunque gotestsum esté instalado")
-	testCmd.Flags().BoolVar(&testCover, "cover", false, "Genera el perfil de cobertura y muestra el total al terminar (o test.cover)")
-	testCmd.Flags().StringVar(&testCoverFile, "cover-profile", "", "Fichero del perfil de cobertura; por defecto test.cover_profile o coverage.out")
-	testCmd.Flags().BoolVar(&testHTML, "html", false, "Abre el informe HTML de cobertura (implica --cover)")
+	testCmd.Flags().BoolVar(&testRace, "race", true, "Enables the race detector (-race)")
+	testCmd.Flags().StringVar(&testShuffle, "shuffle", "on", "Random test order (-shuffle=on)")
+	testCmd.Flags().StringVar(&testPath, "path", "", "Specific package path to test (e.g. ./internal/...)")
+	testCmd.Flags().StringSliceVar(&testExcludeDirs, "exclude-dir", nil, "Directories or packages to exclude (e.g. internal/integration)")
+	testCmd.Flags().StringVar(&testFormat, "format", "", "gotestsum output format (testname, pkgname, dots, testdox, pkgname-and-test-fails...); defaults to test.format or testname")
+	testCmd.Flags().BoolVar(&testPlain, "plain", false, "Uses 'go test -v' even when gotestsum is installed")
+	testCmd.Flags().BoolVar(&testCover, "cover", false, "Writes the coverage profile and prints the total at the end (or test.cover)")
+	testCmd.Flags().StringVar(&testCoverFile, "cover-profile", "", "Coverage profile file; defaults to test.cover_profile or coverage.out")
+	testCmd.Flags().BoolVar(&testHTML, "html", false, "Opens the HTML coverage report (implies --cover)")
 	rootCmd.AddCommand(testCmd)
 }

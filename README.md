@@ -5,165 +5,165 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/jmoyonero/godev/actions/workflows/ci.yml/badge.svg)](https://github.com/jmoyonero/godev/actions/workflows/ci.yml)
 
-> **Herramienta CLI unificada para desarrollo en Go y microservicios.**  
-> Estandariza la calidad de código, análisis de seguridad SAST, comprobación de vulnerabilidades (CVEs), tests con detección de condiciones de carrera y cobertura, generación de código y mocks, imágenes Docker distroless, infraestructura local con Docker Compose y orquestación E2E completa con Robot Framework.
+> **A unified CLI for Go and microservice development.**  
+> It standardizes code quality, SAST security analysis, known-vulnerability (CVE) checks, tests with race detection and coverage, code and mock generation, distroless Docker images, local infrastructure with Docker Compose and full E2E orchestration with Robot Framework.
 
 ---
 
-## 🎯 ¿Por qué `godev`?
+## 🎯 Why `godev`?
 
-Cuando tienes múltiples microservicios en Go, copiar y mantener `Makefiles` o scripts de bash idénticos genera:
-- **Duplicación masiva:** Cambiar la versión de un linter o una regla de seguridad requiere editar 10 repositorios.
-- **Inconsistencias entre desarrolladores:** Comandos que funcionan en Linux o CI pero fallan en macOS con diferencias en `lsof`, `kill` o rutas de Python.
-- **Falta de estándares:** Cada microservicio termina teniendo flags y comandos diferentes.
+When you have several Go microservices, copying and maintaining identical `Makefiles` or bash scripts leads to:
+- **Massive duplication:** Bumping a linter version or a security rule means editing 10 repositories.
+- **Inconsistencies between developers:** Commands that work on Linux or CI but fail on macOS because of differences in `lsof`, `kill` or Python paths.
+- **Lack of standards:** Every microservice ends up with different flags and commands.
 
-`godev` centraliza todo en un **único binario nativo en Go**. En tus microservicios ya no necesitas ningún `Makefile`, ni un `Dockerfile`, ni un `docker-compose.yaml` propio.
+`godev` centralizes everything in a **single native Go binary**. Your microservices no longer need a `Makefile`, a `Dockerfile` or a `docker-compose.yaml` of their own.
 
 ---
 
-## 🚀 Instalación
+## 🚀 Installation
 
-### Con `go install` (Recomendado)
+### With `go install` (Recommended)
 ```bash
 go install github.com/jmoyonero/godev@latest
 ```
 
-Asegúrate de tener `$GOPATH/bin` en tu `PATH`:
+Make sure `$GOPATH/bin` is on your `PATH`:
 ```bash
 export PATH="$HOME/go/bin:$PATH"
 ```
 
-### Requisitos
+### Requirements
 
-- **Go 1.27+.** `golangci-lint` (en la versión de `lint.version`), `gosec` y `govulncheck` se ejecutan con `go run`, sin instalarlos a mano. `godev generate` usa el `mockgen` de `go.uber.org/mock` declarado en el `go.mod` del microservicio.
-- **Docker** con Compose v2, para `infra`, `run`, `e2e` y `build-image`.
-- **Python 3**, solo para `e2e` (el virtualenv lo crea `godev`).
-- **Opcional:** [`gotestsum`](https://github.com/gotestyourself/gotestsum) para una salida de tests más legible (`go install gotest.tools/gotestsum@latest`).
+- **Go 1.27+.** `golangci-lint` (at the `lint.version` version), `gosec` and `govulncheck` run through `go run`, with no manual install. `godev generate` uses the `mockgen` from `go.uber.org/mock` declared in the microservice's `go.mod`.
+- **Docker** with Compose v2, for `infra`, `run`, `e2e` and `build-image`.
+- **Python 3**, only for `e2e` (`godev` creates the virtualenv).
+- **Optional:** [`gotestsum`](https://github.com/gotestyourself/gotestsum) for more readable test output (`go install gotest.tools/gotestsum@latest`).
 
 ---
 
-## 📋 Comandos Disponibles
+## 📋 Available Commands
 
-### 1. Calidad, Linters y Seguridad
+### 1. Quality, Linters and Security
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev verify [--skip-sec] [--skip-vuln]` | **Pipeline completo:** ejecuta en secuencia `lint` + `sec` + `vulncheck` + `test` y emite un informe consolidado con tiempos. |
-| `godev lint [--fix]` | Ejecuta `golangci-lint` con la versión fijada en `lint.version` (por defecto la línea v2). Soporta `--fix` para correcciones automáticas. |
-| `godev sec` | Análisis estático de seguridad SAST con `gosec`, excluyendo los directorios de `sec.exclude_dirs` (código generado y mocks por defecto). |
-| `godev vulncheck` | Escanea vulnerabilidades conocidas (CVEs) en las dependencias con `govulncheck`. |
-| `godev test` | Ejecuta los tests unitarios con `-race` y `-shuffle=on`. Usa `gotestsum` si está instalado y puede generar el informe de cobertura. |
+| `godev verify [--skip-sec] [--skip-vuln]` | **Full pipeline:** runs `lint` + `sec` + `vulncheck` + `test` in sequence and prints a consolidated report with timings. |
+| `godev lint [--fix]` | Runs `golangci-lint` at the version pinned in `lint.version` (the v2 line by default). Supports `--fix` for automatic fixes. |
+| `godev sec` | SAST security analysis with `gosec`, excluding the directories in `sec.exclude_dirs` (generated code and mocks by default). |
+| `godev vulncheck` | Scans dependencies for known vulnerabilities (CVEs) with `govulncheck`. |
+| `godev test` | Runs the unit tests with `-race` and `-shuffle=on`. Uses `gotestsum` when installed and can produce a coverage report. |
 
-Opciones de `godev test`:
+`godev test` options:
 ```bash
-godev test --path ./internal/...        # Paquetes a testear (por defecto ./...)
-godev test --exclude-dir internal/it    # Excluye directorios o paquetes (repetible)
-godev test --race=false --shuffle=off   # Desactiva el detector de carreras o el orden aleatorio
-godev test --format testdox             # Formato de gotestsum (testname, pkgname, dots, testdox...)
-godev test --plain                      # Usa 'go test -v' aunque gotestsum esté instalado
-godev test --cover                      # Genera coverage.out y muestra el total al terminar
-godev test --cover-profile cov.out      # Fichero del perfil de cobertura
-godev test --html                       # Abre el informe HTML de cobertura (implica --cover)
+godev test --path ./internal/...        # Packages to test (./... by default)
+godev test --exclude-dir internal/it    # Excludes directories or packages (repeatable)
+godev test --race=false --shuffle=off   # Disables the race detector or the random order
+godev test --format testdox             # gotestsum format (testname, pkgname, dots, testdox...)
+godev test --plain                      # Uses 'go test -v' even when gotestsum is installed
+godev test --cover                      # Writes coverage.out and prints the total at the end
+godev test --cover-profile cov.out      # Coverage profile file
+godev test --html                       # Opens the HTML coverage report (implies --cover)
 ```
 
-### 2. Generación de Código y Mocks
+### 2. Code and Mock Generation
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev generate`<br>*(alias: `gen`, `mocks`)* | Ejecuta `go generate ./...` (p. ej. OpenAPI con ogen) y genera con `mockgen` los mocks de todas las interfaces del módulo en `internal/mocks`. |
+| `godev generate`<br>*(aliases: `gen`, `mocks`)* | Runs `go generate ./...` (e.g. OpenAPI with ogen) and uses `mockgen` to generate mocks for every interface in the module under `internal/mocks`. |
 
 ```bash
-godev generate --mocks-only   # Solo mocks, sin 'go generate'
-godev generate --skip-mocks   # Solo 'go generate', sin mocks
+godev generate --mocks-only   # Mocks only, no 'go generate'
+godev generate --skip-mocks   # 'go generate' only, no mocks
 ```
 
-### 3. Imágenes Docker
+### 3. Docker Images
 
-`godev` genera un **Dockerfile universal** multi-stage: detecta cada binario en `cmd/` y crea un target por cada uno. Los binarios se compilan estáticos y se ejecutan sobre `gcr.io/distroless/static-debian12:nonroot` (sin shell, usuario no root).
+`godev` generates a multi-stage **universal Dockerfile**: it detects every binary under `cmd/` and creates one target per binary. Binaries are built statically and run on `gcr.io/distroless/static-debian12:nonroot` (no shell, non-root user).
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev dockerfile [-w]` | Imprime el Dockerfile universal, o lo escribe en `./Dockerfile` con `-w`. |
-| `godev build-image`<br>*(alias: `docker-build`)* | Construye la imagen en local con el Dockerfile embebido, sin necesidad de tenerlo en el repo. |
+| `godev dockerfile [-w]` | Prints the universal Dockerfile, or writes it to `./Dockerfile` with `-w`. |
+| `godev build-image`<br>*(alias: `docker-build`)* | Builds the image locally with the embedded Dockerfile, without needing it in the repo. |
 
 ```bash
-godev build-image -t scheduler                   # Target a construir (por defecto api)
-godev build-image -t api -i mi-api:1.2.0         # Tag de la imagen (por defecto <target>:latest)
-godev build-image --ssh-key ~/.ssh/deploy_key    # Clave para módulos Go privados
-godev build-image --no-cache                     # Construye sin caché
+godev build-image -t scheduler                   # Target to build (api by default)
+godev build-image -t api -i my-api:1.2.0         # Image tag (<target>:latest by default)
+godev build-image --ssh-key ~/.ssh/deploy_key    # Key for private Go modules
+godev build-image --no-cache                     # Builds without cache
 ```
 
-Para los módulos privados, la clave SSH se toma de `--ssh-key`, de `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY` o de `~/.ssh/id_ed25519` / `~/.ssh/id_rsa`. Se usa solo durante `go mod download` y no queda en la imagen.
+For private modules, the SSH key is taken from `--ssh-key`, from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY` or from `~/.ssh/id_ed25519` / `~/.ssh/id_rsa`. It is only used during `go mod download` and never ends up in the image.
 
-### 4. Infraestructura Local (Docker Compose)
+### 4. Local Infrastructure (Docker Compose)
 
-Si el repo no tiene `docker-compose.yaml`, `godev` genera uno al vuelo con los servicios de `infra.services`:
+If the repo has no `docker-compose.yaml`, `godev` generates one on the fly with the services in `infra.services`:
 
-| Servicio | Imagen | Puerto por defecto |
+| Service | Image | Default port |
 | :--- | :--- | :--- |
 | `db` | PostgreSQL 18 | `5432` |
-| `wiremock` | WireMock 3 (mappings de `infra.wiremock_dir`) | `8090` |
+| `wiremock` | WireMock 3 (mappings from `infra.wiremock_dir`) | `8090` |
 | `jaeger` | Jaeger all-in-one | `16686` (UI) |
 | `otel-collector` | OpenTelemetry Collector | `4317` (OTLP gRPC) |
-| `prometheus` | Prometheus (activa `otel-collector`) | `9090` |
-| `grafana` | Grafana con dashboards precargados (activa `prometheus`) | `3000` |
+| `prometheus` | Prometheus (enables `otel-collector`) | `9090` |
+| `grafana` | Grafana with preloaded dashboards (enables `prometheus`) | `3000` |
 
-Por defecto se levantan `db`, `wiremock` y `jaeger`. Si el repo ya tiene un compose (`compose_file`, `test/infra/`, `infra/`, `deployments/` o la raíz), se usa ese.
+`db`, `wiremock` and `jaeger` are started by default. If the repo already has a compose file (`compose_file`, `test/infra/`, `infra/`, `deployments/` or the root), that one is used.
 
-> **Una sola infraestructura a la vez.** Todos los repos levantan su infra bajo el mismo proyecto de Compose (`godev`). Al levantar la de un repo se destruye la anterior (sea del proyecto que sea), volúmenes incluidos, así que nunca hay dos stacks peleando por los mismos puertos. Los datos son desechables: cada ejecución empieza con una base de datos limpia.
+> **One infrastructure at a time.** Every repo runs its infra under the same Compose project (`godev`). Bringing up one repo's infra destroys the previous one (whichever project it belonged to), volumes included, so there are never two stacks fighting over the same ports. The data is disposable: every run starts with a clean database.
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev infra up [servicios...]` | Destruye la infra previa, levanta la de este repo en segundo plano y espera a que los servicios estén listos (`pg_isready`, healthchecks HTTP). |
-| `godev infra down [-v]` | Detiene los contenedores (`-v` / `--volumes` elimina también los volúmenes). |
-| `godev infra reset-db` | Levanta la infra y aplica el script de datos semilla (`seeds.sql`). |
-| `godev infra ps` | Muestra el estado de los contenedores. |
+| `godev infra up [services...]` | Destroys the previous infra, brings up this repo's in the background and waits until the services are ready (`pg_isready`, HTTP healthchecks). |
+| `godev infra down [-v]` | Stops the containers (`-v` / `--volumes` also removes the volumes). |
+| `godev infra reset-db` | Brings up the infra and applies the seed data script (`seeds.sql`). |
+| `godev infra ps` | Shows the status of the containers. |
 
-### 5. Desarrollo y Ejecución de Servicios (`godev run`)
+### 5. Running Services in Development (`godev run`)
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev run [servicios...]`<br>*(alias: `start`, `dev`)* | **Ejecutor concurrente en desarrollo:**<br>1. Levanta la infraestructura (destruyendo la de cualquier otro proyecto).<br>2. Compila concurrentemente los servicios declarados en `e2e.services` de `.godev.yaml` (o los indicados por argumento, ej: `godev run api`).<br>3. Libera los puertos ocupados, parando el contenedor que los publique en lugar de matar procesos a ciegas.<br>4. Inyecta variables de entorno combinadas (`e2e.env` + `svc.env`).<br>5. Canaliza los logs de cada servicio con prefijos coloreados y alineados.<br>6. Espera activamente a que los healthchecks respondan OK.<br>7. Detiene limpiamente los procesos al pulsar `Ctrl+C`. |
+| `godev run [services...]`<br>*(aliases: `start`, `dev`)* | **Concurrent development runner:**<br>1. Brings up the infrastructure (destroying any other project's).<br>2. Concurrently builds the services declared in `e2e.services` of `.godev.yaml` (or those passed as arguments, e.g. `godev run api`).<br>3. Frees busy ports by stopping the container that publishes them instead of blindly killing processes.<br>4. Injects the merged environment variables (`e2e.env` + `svc.env`).<br>5. Streams each service's logs with colored, aligned prefixes.<br>6. Actively waits for the healthchecks to respond OK.<br>7. Stops the processes cleanly on `Ctrl+C`. |
 
-Opciones:
+Options:
 ```bash
-godev run             # Compila y arranca todos los servicios
-godev run api         # Arranca únicamente el servicio 'api'
-godev run --reset-db  # Aplica seeds.sql en la base de datos antes de arrancar (-r)
+godev run             # Builds and starts every service
+godev run api         # Starts only the 'api' service
+godev run --reset-db  # Applies seeds.sql to the database before starting (-r)
 ```
 
-### 6. End-to-End con Robot Framework
+### 6. End-to-End with Robot Framework
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev e2e` (o `godev robot`) | **Orquestador inteligente E2E:**<br>1. Destruye la infraestructura local previa (sea del proyecto que sea) y levanta la de este.<br>2. Restaura base de datos con seeds si el repo los define.<br>3. Crea y configura el virtualenv de Python (`.venv`) e instala `requirements.txt` si no existe.<br>4. Libera puertos en uso.<br>5. Compila y arranca en background los servicios necesarios con sus variables de entorno.<br>6. Espera con healthcheck polling activo.<br>7. Ejecuta Robot Framework.<br>8. Abre automáticamente el reporte HTML en Google Chrome.<br>9. Destruye contenedores, procesos y binarios al terminar, pasen o fallen los tests, o al recibir Ctrl+C (salvo los contenedores con `--keep-infra`). |
+| `godev e2e` (or `godev robot`) | **Smart E2E orchestrator:**<br>1. Destroys the previous local infrastructure (whichever project it belonged to) and brings up this one's.<br>2. Restores the database with seeds if the repo defines them.<br>3. Creates and sets up the Python virtualenv (`.venv`) and installs `requirements.txt` if it does not exist.<br>4. Frees ports in use.<br>5. Builds and starts the required services in the background with their environment variables.<br>6. Waits with active healthcheck polling.<br>7. Runs Robot Framework.<br>8. Automatically opens the HTML report in Google Chrome.<br>9. Destroys containers, processes and binaries at the end, whether the tests pass or fail, or on Ctrl+C (except the containers with `--keep-infra`). |
 
-Opciones adicionales:
+Additional options:
 ```bash
-godev e2e --no-browser    # No abre el reporte en el navegador
-godev e2e --keep-infra    # No destruye la infraestructura al terminar (para repetir ejecuciones)
-godev e2e --suite ruta/   # Ejecuta una suite específica
+godev e2e --no-browser    # Does not open the report in the browser
+godev e2e --keep-infra    # Does not destroy the infrastructure at the end (to repeat runs)
+godev e2e --suite path/   # Runs a specific suite
 ```
 
-### 7. Configuración y Utilidades
+### 7. Configuration and Utilities
 
-| Comando | Descripción |
+| Command | Description |
 | :--- | :--- |
-| `godev init [nombre]` | Genera una plantilla de configuración `.godev.yaml` en el directorio actual con todos los valores por defecto. |
-| `godev version` | Muestra la versión actual instalada de `godev`. |
+| `godev init [name]` | Generates a `.godev.yaml` configuration template in the current directory with every default value. |
+| `godev version` | Shows the installed version of `godev`. |
 
 ---
 
-## ⚙️ Configuración (`.godev.yaml`)
+## ⚙️ Configuration (`.godev.yaml`)
 
-`godev` funciona sin configuración previa aplicando defaults inteligentes para Go. Si un microservicio necesita personalizar rutas, puertos o servicios en background, solo requiere un archivo `.godev.yaml` (o `.godev.yml`). Todos los campos son opcionales:
+`godev` works with no prior configuration, applying sensible Go defaults. If a microservice needs to customize paths, ports or background services, it only needs a `.godev.yaml` (or `.godev.yml`) file. Every field is optional:
 
 ```yaml
 name: loaney-api
 
 infra:
-  # compose_file: deployments/docker-compose.yaml  # Sin él, se genera uno al vuelo
-  services: [db, wiremock, jaeger]  # Añade prometheus/grafana para observabilidad
+  # compose_file: deployments/docker-compose.yaml  # Without it, one is generated on the fly
+  services: [db, wiremock, jaeger]  # Add prometheus/grafana for observability
   seeds_file: test/seeds.sql
   wiremock_dir: test/wiremock
   db_service: db
@@ -189,8 +189,8 @@ test:
   exclude_dirs: []
   race: true
   shuffle: "on"
-  format: testname           # Formato de gotestsum
-  cover: false               # true = --cover por defecto
+  format: testname           # gotestsum format
+  cover: false               # true = --cover by default
   cover_profile: coverage.out
 
 e2e:
@@ -226,14 +226,14 @@ e2e:
         PORT: "8080"
 ```
 
-Las rutas de `seeds_file` y `wiremock_dir` se autodetectan si no se indican (`test/`, `test/infra/`, `infra/`, `deployments/` o la raíz).
+The `seeds_file` and `wiremock_dir` paths are auto-detected when not set (`test/`, `test/infra/`, `infra/`, `deployments/` or the root).
 
 ---
 
-## 👨‍💻 Autor
+## 👨‍💻 Author
 
-Creado y mantenido por **Jonathan Moyonero** ([@jmoyonero](https://github.com/jmoyonero)).
+Created and maintained by **Jonathan Moyonero** ([@jmoyonero](https://github.com/jmoyonero)).
 
-## 📄 Licencia
+## 📄 License
 
-Distribuido bajo la Licencia MIT. Consulta [LICENSE](LICENSE) para más información.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.

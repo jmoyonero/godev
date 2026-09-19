@@ -64,7 +64,7 @@ func semverMajor(version string) (int, bool) {
 
 var lintCmd = &cobra.Command{
 	Use:   "lint",
-	Short: "Ejecuta golangci-lint sobre el proyecto Go",
+	Short: "Runs golangci-lint on the Go project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -81,22 +81,22 @@ var lintCmd = &cobra.Command{
 		cmdArgs := []string{"run", toolPkg, "run"}
 		if lintFix {
 			cmdArgs = append(cmdArgs, "--fix")
-			ui.Step("🛠️  Aplicando correcciones automáticas con golangci-lint (%s)...", version)
+			ui.Step("🛠️  Applying automatic fixes with golangci-lint (%s)...", version)
 		} else {
-			ui.Step("🔍 Ejecutando golangci-lint (%s)...", version)
+			ui.Step("🔍 Running golangci-lint (%s)...", version)
 		}
 		cmdArgs = append(cmdArgs, "./...")
 
 		if err := execx.Run("go", cmdArgs...); err != nil {
-			return fmt.Errorf("falló la ejecución de golangci-lint: %w", err)
+			return fmt.Errorf("golangci-lint run failed: %w", err)
 		}
 
-		ui.Success("Análisis de linting completado sin errores.")
+		ui.Success("Linting completed with no errors.")
 		return nil
 	},
 }
 
 func init() {
-	lintCmd.Flags().BoolVar(&lintFix, "fix", false, "Aplica correcciones automáticas si es posible")
+	lintCmd.Flags().BoolVar(&lintFix, "fix", false, "Applies automatic fixes when possible")
 	rootCmd.AddCommand(lintCmd)
 }
