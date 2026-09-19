@@ -114,10 +114,11 @@ func TestInfraResetDbCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("a missing seeds file is an error", func(t *testing.T) {
-		infraProject(t)
+	t.Run("a missing seeds file fails before touching the stack", func(t *testing.T) {
+		fake := infraProject(t)
 		_, err := execute(t, "infra", "reset-db")
 		assertErrorContains(t, err, "could not read the seeds file test/seeds.sql")
+		assertCommands(t, fake)
 	})
 
 	t.Run("a psql failure is an error", func(t *testing.T) {

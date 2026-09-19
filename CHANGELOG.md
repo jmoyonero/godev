@@ -16,7 +16,11 @@ Release notes with full commit lists are also published on the
 - Dependabot for Go modules and GitHub Actions.
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates.
 
+### Changed
+- A failing command (linter findings, red tests, a missing file...) prints only the error; the usage help is shown for usage mistakes such as an unknown flag.
+
 ### Fixed
+- `godev infra reset-db` checks the seeds file exists before tearing down and restarting the stack.
 - `godev test --race=false` and `test.race: false` now disable the race detector; before, the flag's default always turned it back on.
 - `test.shuffle` from `.godev.yaml` is honored; before, the `--shuffle` default always overrode it.
 - `godev test` no longer shadows the command arguments.

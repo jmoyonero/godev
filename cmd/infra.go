@@ -153,20 +153,22 @@ var infraResetDbCmd = &cobra.Command{
 			return err
 		}
 
+		// Read the seeds first: a missing file must fail before the current
+		// stack is torn down and a new one started for nothing.
+		seedsFile := cfg.Infra.SeedsFile
+		seedsData, err := os.ReadFile(seedsFile)
+		if err != nil {
+			return fmt.Errorf("could not read the seeds file %s: %w", seedsFile, err)
+		}
+
 		composeFile, err := infra.ResolveComposeFile(cfg)
 		if err != nil {
 			return fmt.Errorf("error resolving infrastructure: %w", err)
 		}
 
-		// 1. Make sure the infra is up
+		// Make sure the infra is up
 		if err := infraUpCmd.RunE(cmd, nil); err != nil {
 			return err
-		}
-
-		seedsFile := cfg.Infra.SeedsFile
-		seedsData, err := os.ReadFile(seedsFile)
-		if err != nil {
-			return fmt.Errorf("could not read the seeds file %s: %w", seedsFile, err)
 		}
 
 		ui.Step("🌱 Running seeds (%s) on service '%s' (database '%s')...", seedsFile, cfg.Infra.DbService, cfg.Infra.DbName)
