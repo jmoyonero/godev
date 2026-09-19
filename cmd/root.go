@@ -13,6 +13,13 @@ var rootCmd = &cobra.Command{
 local infrastructure and E2E test orchestration (Robot Framework) across your Go projects.
 
 Created by @jmoyonero.`,
+	// By the time this hook runs, cobra has already parsed the flags and
+	// validated the arguments, so usage mistakes still print the help. From
+	// here on an error comes from the work itself (a failing linter, red
+	// tests), where dumping the whole usage would only bury the message.
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		cmd.SilenceUsage = true
+	},
 }
 
 func Execute() {

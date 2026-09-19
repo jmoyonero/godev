@@ -36,7 +36,8 @@ func execute(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// resetFlags restores every flag of c and its subcommands to its default.
+// resetFlags restores every flag of c and its subcommands to its default, and
+// undoes the SilenceUsage set by the root's PersistentPreRun.
 func resetFlags(c *cobra.Command) {
 	reset := func(f *pflag.Flag) {
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
@@ -46,6 +47,7 @@ func resetFlags(c *cobra.Command) {
 		}
 		f.Changed = false
 	}
+	c.SilenceUsage = false
 	c.Flags().VisitAll(reset)
 	c.PersistentFlags().VisitAll(reset)
 	for _, sub := range c.Commands() {
@@ -97,7 +99,11 @@ type answer struct {
 
 func assertCommands(t *testing.T, fake *execxtest.Fake, want ...string) {
 	t.Helper()
-	if got := fake.Commands(); !reflect.DeepEqual(got, want) {
+	got := fake.Commands()
+	if len(got) == 0 && len(want) == 0 {
+		return
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("commands run:\n  got:  %q\n  want: %q", got, want)
 	}
 }
