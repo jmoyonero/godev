@@ -47,9 +47,14 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 
 		ui.Header("SERVICIOS EN DESARROLLO (GODEV RUN)")
 
-		// 1. Restaurar BBDD con seeds si se solicita
+		// 1. Asegurar infraestructura (Postgres, etc.) arriba, deteniendo antes la de
+		//    cualquier otro proyecto de godev que siguiera levantada en esta máquina.
+		ui.Step("1. Levantando infraestructura...")
+		if err := infraUpCmd.RunE(cmd, nil); err != nil {
+			return fmt.Errorf("falló levantar infraestructura: %w", err)
+		}
 		if runResetDb && cfg.Infra.SeedsFile != "" && fileExists(cfg.Infra.SeedsFile) {
-			ui.Step("🌱 Restaurando base de datos con seeds...")
+			ui.Step("   Restaurando base de datos con seeds...")
 			if err := infraResetDbCmd.RunE(cmd, nil); err != nil {
 				return fmt.Errorf("falló la restauración de BBDD: %w", err)
 			}
@@ -103,7 +108,7 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 			}
 			for _, svc := range servicesToRun {
 				if svc.Port > 0 {
-					execx.KillPort(svc.Port)
+					execx.FreePort(svc.Port)
 				}
 			}
 			for _, bin := range tempBinaries {
@@ -115,7 +120,7 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 		binPaths := make(map[string]string)
 		for _, svc := range servicesToRun {
 			if svc.Port > 0 {
-				execx.KillPort(svc.Port)
+				execx.FreePort(svc.Port)
 			}
 
 			binName := fmt.Sprintf("/tmp/godev-run-%s-%d", svc.Name, time.Now().UnixNano())
