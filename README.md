@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="godev banner" width="100%" />
+</p>
+
 # godev 🛠️
 
 [![Go Version](https://img.shields.io/badge/go-1.27+-00ADD8?style=flat&logo=go)](https://golang.org)
