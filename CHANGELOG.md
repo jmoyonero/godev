@@ -17,6 +17,11 @@ Release notes with full commit lists are also published on the
 - **Breaking.** The deploy key is never taken from `~/.ssh` implicitly. It comes from `--ssh-key`, from the new `docker.ssh_key` option or from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY`, and an unreadable path is now an error instead of a silent fallback.
 - `go.mod` declares `go 1.27` instead of `go 1.27.1`, so Go 1.27.0 no longer has to download a newer toolchain to install godev.
 
+### Project
+- GitHub Actions are pinned by commit SHA, with the version in a comment that Dependabot keeps updated, so a moved tag cannot change what CI runs.
+- CI runs on every pull request instead of only those targeting `main`, so stacked PRs and PRs aimed at other branches are checked too.
+- `pkg/ui` writes through an injectable writer and is covered by tests (0% → 100%); `pkg/infra` gains tests for `ResolveComposeFile` and `TearDownManagedStack` (73.9% → 87.0%), and its tests no longer leave a `test/` directory behind in the package.
+
 ### Added
 - `docker.ssh_key` in `.godev.yaml`: the path of the key that downloads the project's private modules, with `~` expanded.
 
