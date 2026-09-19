@@ -278,6 +278,19 @@ func TestFreePort(t *testing.T) {
 			want:    []string{psFilter, "docker stop abc123", "lsof -ti tcp:5432"},
 		},
 		{
+			name:    "skips whatever lsof prints that is not a pid",
+			port:    5432,
+			answers: map[string]string{"lsof": "not-a-pid\n333\n", "ps -p 333": "myservice\n"},
+			want:    []string{psFilter, "lsof -ti tcp:5432", "ps -p 333 -o comm=", "kill -9 333"},
+		},
+		{
+			name:    "kills the process when its name cannot be read",
+			port:    5432,
+			answers: map[string]string{"lsof": "444\n"},
+			fails:   map[string]bool{"ps -p": true},
+			want:    []string{psFilter, "lsof -ti tcp:5432", "ps -p 444 -o comm=", "kill -9 444"},
+		},
+		{
 			name:  "does nothing when docker and lsof are unavailable",
 			port:  5432,
 			fails: map[string]bool{"docker ps": true, "lsof": true},

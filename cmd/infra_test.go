@@ -7,9 +7,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jmoyonero/godev/pkg/config"
+	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/execx/execxtest"
 )
 
@@ -206,5 +210,106 @@ func TestEnabledServices(t *testing.T) {
 				t.Errorf("enabledServices() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestStartInfra_AppliesTheDefaultPorts(t *testing.T) {
+	fake := setup(t)
+	writeFile(t, "docker-compose.yaml", "services: {}\n")
+
+	// Every port left at zero: only the database is started, so no readiness
+	// probe reaches the network.
+	cfg := &config.Config{Infra: config.InfraConfig{Services: []string{"db"}, DbService: "db", DbUser: "postgres", DbName: "app_db"}}
+	if _, err := startInfra(cfg, nil); err != nil {
+		t.Fatalf("startInfra() error = %v", err)
+	}
+	assertCommands(t, fake,
+		"docker compose -p godev down -v --remove-orphans",
+		composePrefix+"up -d",
+		composePrefix+"exec -T db pg_isready -U postgres -d app_db",
+	)
+}
+
+func TestStartInfra_ObservabilityStack(t *testing.T) {
+	setup(t)
+	writeFile(t, "docker-compose.yaml", "services: {}\n")
+
+	// Grafana pulls in Prometheus, which pulls in the collector. Both are
+	// probed over HTTP, so they point at servers that are already up.
+	prometheus := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(prometheus.Close)
+	grafana := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(grafana.Close)
+
+	cfg := &config.Config{Infra: config.InfraConfig{
+		Services:       []string{"grafana", "jaeger"},
+		PrometheusPort: serverPort(t, prometheus.URL),
+		GrafanaPort:    serverPort(t, grafana.URL),
+		DbPort:         5432,
+		WireMockPort:   8090,
+		OtelPort:       4317,
+	}}
+	if _, err := startInfra(cfg, nil); err != nil {
+		t.Fatalf("startInfra() error = %v", err)
+	}
+}
+
+// serverPort extracts the port a test server is listening on.
+func serverPort(t *testing.T, rawURL string) int {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
+}
+
+func TestInfraCommands_ReportAnUnresolvableStack(t *testing.T) {
+	// With no compose file in the repo, godev generates one under the
+	// temporary directory; when that cannot be written, every command fails.
+	commands := [][]string{{"infra", "up"}, {"infra", "down"}, {"infra", "ps"}, {"infra", "reset-db"}}
+	for _, args := range commands {
+		t.Run(joinArgs(args), func(t *testing.T) {
+			setup(t)
+			writeFile(t, "seeds.sql", "select 1;\n")
+			writeFile(t, config.DefaultConfigFile, "infra:\n  seeds_file: seeds.sql\n")
+			blockTempDir(t)
+
+			_, err := execute(t, args...)
+			assertErrorContains(t, err, "error resolving infrastructure")
+		})
+	}
+}
+
+func TestInfraResetDbCommand_ReportsAFailedStart(t *testing.T) {
+	fake := infraProject(t)
+	writeFile(t, "seeds.sql", "select 1;\n")
+	writeFile(t, config.DefaultConfigFile, "infra:\n  seeds_file: seeds.sql\n")
+	fake.Handler = respond(map[string]answer{composePrefix + "up": {err: errFailed}})
+
+	_, err := execute(t, "infra", "reset-db")
+	if err == nil {
+		t.Fatal("error = nil, want the failure bringing the stack up")
+	}
+	if _, ok := fake.Find(composePrefix + "exec -T db psql"); ok {
+		t.Error("the seeds were applied although the stack never came up")
+	}
+}
+
+func TestWaitForPgReady_TimesOut(t *testing.T) {
+	fake := setup(t)
+	fake.Handler = func(execx.Cmd) ([]byte, error) { return nil, errFailed }
+
+	// Long enough for one retry, short enough not to slow the suite down.
+	err := waitForPgReady("docker-compose.yaml", "db", "postgres", "app_db", 600*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("waitForPgReady() = %v, want a timeout", err)
+	}
+	if len(fake.Commands()) < 2 {
+		t.Errorf("pg_isready was tried %d times, want a retry", len(fake.Commands()))
 	}
 }

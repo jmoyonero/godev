@@ -335,14 +335,28 @@ func WaitForURL(urlStr string, timeout time.Duration) error {
 
 // OpenBrowser opens a file or URL in the default browser (preferring Google Chrome on Mac)
 func OpenBrowser(target string) {
-	switch runtime.GOOS {
+	for _, opener := range browserOpeners(runtime.GOOS, target) {
+		if err := RunQuiet(opener[0], opener[1:]...); err == nil {
+			return
+		}
+	}
+}
+
+// browserOpeners lists the commands that open target on goos, in the order they
+// are tried: the first one that succeeds wins. An unsupported OS gets none, and
+// the report is simply left on disk.
+func browserOpeners(goos, target string) [][]string {
+	switch goos {
 	case "darwin":
-		if err := RunQuiet("open", "-a", "Google Chrome", target); err != nil {
-			_ = RunQuiet("open", target)
+		// Chrome first: the Robot Framework reports are written for it.
+		return [][]string{
+			{"open", "-a", "Google Chrome", target},
+			{"open", target},
 		}
 	case "linux":
-		_ = RunQuiet("xdg-open", target)
+		return [][]string{{"xdg-open", target}}
 	case "windows":
-		_ = RunQuiet("rundll32", "url.dll,FileProtocolHandler", target)
+		return [][]string{{"rundll32", "url.dll,FileProtocolHandler", target}}
 	}
+	return nil
 }

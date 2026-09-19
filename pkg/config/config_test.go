@@ -294,3 +294,13 @@ func assertExample(t *testing.T, name, wantName string) {
 		t.Errorf("round-tripped example = %+v, want %+v", got, *want)
 	}
 }
+
+func TestLoad_UnreadableFileReturnsError(t *testing.T) {
+	inTempDir(t)
+	// A directory named like the config file: it is found, but cannot be read.
+	mkdir(t, ".godev.yaml")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want the read error")
+	}
+}

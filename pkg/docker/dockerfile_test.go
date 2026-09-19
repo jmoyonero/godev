@@ -49,10 +49,7 @@ func TestGenerateUniversalDockerfile_Golden(t *testing.T) {
 			}
 			inProject(t, tt.goMod, tt.cmdDirs...)
 
-			got, err := GenerateUniversalDockerfile(tt.opts)
-			if err != nil {
-				t.Fatalf("GenerateUniversalDockerfile() error = %v", err)
-			}
+			got := GenerateUniversalDockerfile(tt.opts)
 
 			if *update {
 				if err := os.WriteFile(golden, []byte(got), 0o600); err != nil {
@@ -73,10 +70,7 @@ func TestGenerateUniversalDockerfile_Golden(t *testing.T) {
 func TestGenerateUniversalDockerfile_Stages(t *testing.T) {
 	inProject(t, "module example.com/svc\n\ngo 1.26.2\n", "api", "worker")
 
-	got, err := GenerateUniversalDockerfile(Options{})
-	if err != nil {
-		t.Fatalf("GenerateUniversalDockerfile() error = %v", err)
-	}
+	got := GenerateUniversalDockerfile(Options{})
 
 	for _, want := range []string{
 		"FROM golang:1.26.2-alpine AS builder",
@@ -108,10 +102,7 @@ func TestGenerateUniversalDockerfile_Stages(t *testing.T) {
 func TestGenerateUniversalDockerfile_PrivateModules(t *testing.T) {
 	inProject(t, "module example.com/svc\n\ngo 1.26.2\n", "api")
 
-	got, err := GenerateUniversalDockerfile(Options{PrivateModulePrefix: "gitlab.com/acme"})
-	if err != nil {
-		t.Fatalf("GenerateUniversalDockerfile() error = %v", err)
-	}
+	got := GenerateUniversalDockerfile(Options{PrivateModulePrefix: "gitlab.com/acme"})
 
 	for _, want := range []string{
 		"# syntax=docker/dockerfile:1\n",

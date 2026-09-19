@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/jmoyonero/godev/pkg/config"
 )
 
 func TestTestCommand(t *testing.T) {
@@ -304,4 +308,51 @@ func TestTestCommand_Failure(t *testing.T) {
 	assertErrorContains(t, err, "unit tests failed")
 	// No coverage report is read after failing tests.
 	assertCommands(t, fake, "go test -v -race -shuffle=on -coverprofile=coverage.out ./...")
+}
+
+func TestTestCommand_FallsBackToTheBuiltInDefaults(t *testing.T) {
+	fake := setup(t)
+	fake.Installed = map[string]bool{"gotestsum": true}
+	fake.Handler = respond(map[string]answer{
+		"go tool cover": {out: "total:\t(statements)\t91.0%\n"},
+	})
+	// Every value the config can leave empty, emptied at once.
+	writeFile(t, config.DefaultConfigFile, "test:\n  path: \"\"\n  format: \"\"\n  cover_profile: \"\"\n  cover: true\n")
+
+	if _, err := execute(t, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "gotestsum --format " + config.DefaultTestFormat +
+		" -- -race -shuffle=on -coverprofile=" + config.DefaultCoverProfile + " ./..."
+	if got := fake.Commands()[0]; got != want {
+		t.Errorf("command = %q, want %q", got, want)
+	}
+}
+
+func TestTestCommand_ListingPackages(t *testing.T) {
+	t.Run("blank lines in go list are ignored", func(t *testing.T) {
+		fake := setup(t)
+		fake.Handler = respond(map[string]answer{
+			"go list": {out: "example.com/a\n\n   \nexample.com/b\n"},
+		})
+
+		if _, err := execute(t, "test", "--exclude-dir", "internal/mocks"); err != nil {
+			t.Fatal(err)
+		}
+		if got := fake.Commands()[1]; !strings.HasSuffix(got, "example.com/a example.com/b") {
+			t.Errorf("packages passed to go test = %q, want only the two real ones", got)
+		}
+	})
+
+	t.Run("an unreadable package list is reported", func(t *testing.T) {
+		fake := setup(t)
+		// A single line longer than bufio's limit cannot be scanned.
+		fake.Handler = respond(map[string]answer{
+			"go list": {out: strings.Repeat("x", bufio.MaxScanTokenSize+1)},
+		})
+
+		_, err := execute(t, "test", "--exclude-dir", "internal/mocks")
+		assertErrorContains(t, err, "error scanning packages")
+	})
 }

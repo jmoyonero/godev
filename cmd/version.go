@@ -15,6 +15,10 @@ var (
 	Date    = "unknown"
 )
 
+// readBuildInfo is debug.ReadBuildInfo, replaceable so tests can exercise the
+// fallbacks for metadata only a real release binary carries.
+var readBuildInfo = debug.ReadBuildInfo
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Shows the godev version",
@@ -34,7 +38,7 @@ func versionString() string {
 func buildInfo() (version, commit, date string) {
 	version, commit, date = Version, Commit, Date
 
-	info, ok := debug.ReadBuildInfo()
+	info, ok := readBuildInfo()
 	if !ok {
 		return version, commit, date
 	}

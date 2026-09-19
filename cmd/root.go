@@ -22,9 +22,13 @@ Created by @jmoyonero.`,
 	},
 }
 
+// exit ends the process. It is a variable so tests can run Execute without
+// taking the test binary down with it.
+var exit = os.Exit
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		exit(1)
 	}
 }
 

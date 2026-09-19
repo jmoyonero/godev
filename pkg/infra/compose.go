@@ -11,6 +11,19 @@ import (
 	"github.com/jmoyonero/godev/pkg/config"
 )
 
+// marshalCompose serializes the generated compose document. Serializing it
+// cannot fail in practice, but the error is still handled, so SetComposeMarshaler
+// lets a test reach that path.
+var marshalCompose = yaml.Marshal
+
+// SetComposeMarshaler replaces the YAML marshaler and returns a function that
+// restores the previous one. It is meant for tests.
+func SetComposeMarshaler(m func(any) ([]byte, error)) (restore func()) {
+	prev := marshalCompose
+	marshalCompose = m
+	return func() { marshalCompose = prev }
+}
+
 type ComposeConfig struct {
 	Name     string                    `yaml:"name"`
 	Services map[string]ComposeService `yaml:"services"`
@@ -397,7 +410,7 @@ providers:
 		}
 	}
 
-	data, err := yaml.Marshal(compose)
+	data, err := marshalCompose(compose)
 	if err != nil {
 		return "", fmt.Errorf("error serializing dynamic compose: %w", err)
 	}

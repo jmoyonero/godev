@@ -10,6 +10,10 @@ import (
 	"github.com/jmoyonero/godev/pkg/ui"
 )
 
+// generateExample is config.GenerateExample, replaceable in tests: serializing
+// the defaults cannot fail in practice, but the error is still handled.
+var generateExample = config.GenerateExample
+
 var initCmd = &cobra.Command{
 	Use:   "init [microservice-name]",
 	Short: "Creates a .godev.yaml configuration template in the current directory",
@@ -24,7 +28,7 @@ var initCmd = &cobra.Command{
 			name = args[0]
 		}
 
-		data, err := config.GenerateExample(name)
+		data, err := generateExample(name)
 		if err != nil {
 			return err
 		}

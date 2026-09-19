@@ -20,7 +20,9 @@ Release notes with full commit lists are also published on the
 ### Project
 - GitHub Actions are pinned by commit SHA, with the version in a comment that Dependabot keeps updated, so a moved tag cannot change what CI runs.
 - CI runs on every pull request instead of only those targeting `main`, so stacked PRs and PRs aimed at other branches are checked too.
-- `pkg/ui` writes through an injectable writer and is covered by tests (0% → 100%); `pkg/infra` gains tests for `ResolveComposeFile` and `TearDownManagedStack` (73.9% → 87.0%), and its tests no longer leave a `test/` directory behind in the package.
+- Test coverage is 100% of statements in every package, up from 94.2%. `pkg/ui` writes through an injectable writer (`SetOutput`) instead of printing straight to the process's streams, `execx.OpenBrowser` resolves its per-OS commands through a pure function so every platform is covered from any machine, and the service binary's `.exe` suffix does the same. The tests reach the failure paths of the filesystem by arranging real conditions (a directory where a file is expected, an unreadable file, a read-only working directory) and skip those cases when running as root.
+- `pkg/infra` tests no longer leave a `test/` directory behind in the package.
+- `GenerateUniversalDockerfile` no longer returns an error it never produced.
 
 ### Added
 - `docker.ssh_key` in `.godev.yaml`: the path of the key that downloads the project's private modules, with `~` expanded.

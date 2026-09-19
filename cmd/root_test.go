@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -39,4 +40,55 @@ func TestUsageIsPrintedOnlyForUsageErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExecute(t *testing.T) {
+	// Execute is the entry point main() calls: it runs the root command and
+	// turns a failure into a non-zero exit status.
+	withExit := func(t *testing.T) *int {
+		t.Helper()
+		var code *int
+		prev := exit
+		exit = func(c int) { code = &c }
+		t.Cleanup(func() { exit = prev })
+		return code
+	}
+
+	t.Run("a successful command does not exit", func(t *testing.T) {
+		setup(t)
+		code := withExit(t)
+		rootCmd.SetArgs([]string{"version"})
+		rootCmd.SetOut(&bytes.Buffer{})
+		t.Cleanup(func() { rootCmd.SetArgs(nil); rootCmd.SetOut(nil); resetFlags(rootCmd) })
+
+		Execute()
+
+		if code != nil {
+			t.Errorf("exit(%d) called for a successful command", *code)
+		}
+	})
+
+	t.Run("a failing command exits with 1", func(t *testing.T) {
+		fake := setup(t)
+		fake.Handler = func(execx.Cmd) ([]byte, error) { return nil, errFailed }
+		exited := false
+		prev := exit
+		exit = func(int) { exited = true }
+		rootCmd.SetArgs([]string{"lint"})
+		rootCmd.SetOut(&bytes.Buffer{})
+		rootCmd.SetErr(&bytes.Buffer{})
+		t.Cleanup(func() {
+			exit = prev
+			rootCmd.SetArgs(nil)
+			rootCmd.SetOut(nil)
+			rootCmd.SetErr(nil)
+			resetFlags(rootCmd)
+		})
+
+		Execute()
+
+		if !exited {
+			t.Error("a failing command did not exit")
+		}
+	})
 }

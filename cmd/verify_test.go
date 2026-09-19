@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jmoyonero/godev/pkg/config"
+	"github.com/jmoyonero/godev/pkg/execx"
 )
 
 func TestVerifyCommand(t *testing.T) {
@@ -44,4 +46,31 @@ func TestVerifyCommand(t *testing.T) {
 		assertErrorContains(t, err, "gosec")
 		assertCommands(t, fake, lint, sec)
 	})
+}
+
+func TestVerifyCommand_StopsAtTheFirstFailingStep(t *testing.T) {
+	tests := []struct {
+		name    string
+		failing string
+		wantErr string
+	}{
+		{"lint", "golangci-lint", "golangci-lint run failed"},
+		{"gosec", "gosec", "gosec found security issues"},
+		{"govulncheck", "govulncheck", "govulncheck found vulnerabilities"},
+		{"tests", "go test", "unit tests failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := setup(t)
+			fake.Handler = func(c execx.Cmd) ([]byte, error) {
+				if strings.Contains(c.String(), tt.failing) {
+					return nil, errFailed
+				}
+				return nil, nil
+			}
+
+			_, err := execute(t, "verify")
+			assertErrorContains(t, err, tt.wantErr)
+		})
+	}
 }

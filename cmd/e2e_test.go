@@ -213,3 +213,80 @@ func TestE2ECommand_Failures(t *testing.T) {
 		}
 	})
 }
+
+func TestE2ECommand_InfrastructureFailures(t *testing.T) {
+	t.Run("the stack does not come up", func(t *testing.T) {
+		fake := e2eProject(t, "")
+		fake.Handler = respond(map[string]answer{composePrefix + "up": {err: errFailed}})
+
+		_, err := execute(t, "e2e")
+		assertErrorContains(t, err, "failed to bring up the infrastructure before e2e")
+	})
+
+	t.Run("the seeds cannot be read", func(t *testing.T) {
+		infraProjectWith(t, "  seeds_file: seeds.sql\n"+servicesConfig(t))
+		writeFile(t, robotBin, "")
+		unreadableFile(t, "seeds.sql", "select 1;\n")
+
+		_, err := execute(t, "e2e")
+		assertErrorContains(t, err, "could not read the seeds file")
+	})
+
+	t.Run("the seeds are rejected", func(t *testing.T) {
+		fake := infraProjectWith(t, "  seeds_file: seeds.sql\n"+servicesConfig(t))
+		writeFile(t, robotBin, "")
+		writeFile(t, "seeds.sql", "select 1;\n")
+		fake.Handler = respond(map[string]answer{composePrefix + "exec -T db psql": {err: errFailed}})
+
+		_, err := execute(t, "e2e")
+		assertErrorContains(t, err, "database restore before e2e failed")
+	})
+}
+
+func TestE2ECommand_FallsBackToTheDefaultLayout(t *testing.T) {
+	// Every e2e path left empty: godev uses test/robot and creates the venv,
+	// with no requirements file to install.
+	fake := infraProjectWith(t, `e2e:
+  venv_dir: ""
+  requirements: ""
+  results_dir: ""
+  suite_dir: ""
+  services: []
+`)
+
+	if _, err := execute(t, "e2e", "--no-browser"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := fake.Find("python3 -m venv " + filepath.FromSlash("test/robot/.venv")); !ok {
+		t.Errorf("the default virtualenv was not created: %q", fake.Commands())
+	}
+	if _, ok := fake.Find(filepath.FromSlash(pipBin) + " install -r"); ok {
+		t.Error("requirements were installed although the project has none")
+	}
+	robot, ok := robotCommand(fake)
+	if !ok {
+		t.Fatalf("robot was not run: %q", fake.Commands())
+	}
+	want := filepath.FromSlash(robotBin) + " -d " + filepath.FromSlash("test/robot/results") + " " + filepath.FromSlash("test/robot")
+	if robot.String() != want {
+		t.Errorf("robot command = %q, want %q", robot.String(), want)
+	}
+}
+
+func TestE2ECommand_ReportsAFailedRequirementsInstall(t *testing.T) {
+	fake := infraProjectWith(t, servicesConfig(t))
+	writeFile(t, "test/robot/requirements.txt", "robotframework\n")
+	fake.Handler = respond(map[string]answer{filepath.FromSlash(pipBin) + " install -r": {err: errFailed}})
+
+	_, err := execute(t, "e2e")
+	assertErrorContains(t, err, "error installing requirements in venv")
+}
+
+func TestE2ECommand_ReportsAServiceThatDoesNotStart(t *testing.T) {
+	fake := e2eProject(t, "")
+	fake.OnStart = func(*execxtest.Process) error { return errFailed }
+
+	_, err := execute(t, "e2e")
+	assertErrorContains(t, err, "error starting")
+}
