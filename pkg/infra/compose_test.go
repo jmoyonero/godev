@@ -4,9 +4,10 @@ import (
 	"os"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/infra"
-	"gopkg.in/yaml.v3"
 )
 
 func TestGenerateDynamicCompose_Observability(t *testing.T) {

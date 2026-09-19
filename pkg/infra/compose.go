@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jmoyonero/godev/pkg/config"
 	"gopkg.in/yaml.v3"
+
+	"github.com/jmoyonero/godev/pkg/config"
 )
 
 type ComposeConfig struct {

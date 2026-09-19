@@ -1,0 +1,62 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nolintlint
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions:
+        # Console output: a failed write to the terminal is not actionable.
+        - (*github.com/fatih/color.Color).Print
+        - (*github.com/fatih/color.Color).Println
+        - (*github.com/fatih/color.Color).Printf
+    gosec:
+      excludes:
+        # godev is a task runner: running tools with arguments built from the
+        # project config and reading user-provided paths is its whole purpose.
+        - G204 # subprocess launched with variable
+        - G304 # file inclusion via variable
+        # Generated compose/Grafana files are bind-mounted into containers that
+        # run as other users, so they must stay world-readable.
+        - G301 # directory permissions > 0750
+        - G306 # WriteFile permissions > 0600
+        - G104 # unhandled errors, already covered by errcheck
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, unparam]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jmoyonero/godev

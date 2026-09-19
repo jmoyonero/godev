@@ -90,25 +90,6 @@ type Config struct {
 	E2E   E2EConfig   `yaml:"e2e"`
 }
 
-func detectComposeFile() string {
-	candidates := []string{
-		"test/infra/docker-compose.yaml",
-		"test/infra/docker-compose.yml",
-		"infra/docker-compose.yaml",
-		"infra/docker-compose.yml",
-		"deployments/docker-compose.yaml",
-		"deployments/docker-compose.yml",
-		"docker-compose.yaml",
-		"docker-compose.yml",
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
-	}
-	return "test/infra/docker-compose.yaml"
-}
-
 func detectSeedsFile() string {
 	candidates := []string{
 		"test/seeds.sql",
@@ -193,8 +174,6 @@ func DefaultConfig() *Config {
 // merging findings with default values.
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
-
-	// Auto-detection handled by detectComposeFile() in DefaultConfig()
 
 	// Check for config file
 	candidates := []string{".godev.yaml", ".godev.yml"}

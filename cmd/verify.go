@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmoyonero/godev/pkg/ui"
 	"github.com/spf13/cobra"
+
+	"github.com/jmoyonero/godev/pkg/ui"
 )
 
 var (
