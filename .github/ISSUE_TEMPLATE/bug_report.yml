@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in godev does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! For security issues, use
+        [private vulnerability reporting](https://github.com/jmoyonero/godev/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran and, if relevant, your `.godev.yaml` (remove secrets).
+      placeholder: |
+        1. godev infra up
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The full command output. It is formatted as code automatically.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: godev version
+      description: Output of `godev version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Linux, Windows, Other]
+    validations:
+      required: true
+  - type: input
+    id: tools
+    attributes:
+      label: Go and Docker versions
+      description: Output of `go version` and `docker version --format '{{.Server.Version}}'`.
