@@ -9,6 +9,11 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-20
+
+### Added
+- `docker.ssh_key` in `.godev.yaml`: the path of the key that downloads the project's private modules, with `~` expanded.
+
 ### Changed
 - **Breaking.** The generated Dockerfile no longer hardcodes the maintainer's GitHub organization. `GOPRIVATE` and the SSH rewrite use the prefix in `docker.private_modules`, or the owner of the module declared in `go.mod` when it is not set. A project whose dependencies are all public gets a builder stage with no `GOPRIVATE`, no `openssh-client` and no `SSH_DEPLOY_KEY_B64`, and `build-image` no longer hands a key to Docker there.
 - **Breaking.** The local stack no longer defaults to the `loaney_db` database owned by `admin`: `db_name` defaults to `<name>_db` taken from `.godev.yaml` (`app_db` when the project has no name) and `db_user` to `postgres`. Projects relying on the old defaults must set `infra.db_name` and `infra.db_user` explicitly.
@@ -23,9 +28,6 @@ Release notes with full commit lists are also published on the
 - Test coverage is 99.6% of statements, up from 94.2%, and 100% in every package but `cmd` and `pkg/infra`. `pkg/ui` writes through an injectable writer (`SetOutput`) instead of printing straight to the process's streams, `execx.OpenBrowser` resolves its per-OS commands through a pure function so every platform is covered from any machine, `buildInfoFrom` does the same for the metadata a release binary embeds, and so does the service binary's `.exe` suffix. The tests reach the failure paths of the filesystem by arranging real conditions (a directory where a file is expected, an unreadable file, a read-only working directory) and skip those cases when running as root. The four statements left uncovered are error branches that are handled but cannot happen in practice: a binary with no build info, and serializing the defaults, the compose document or a key into a directory just created.
 - `pkg/infra` tests no longer leave a `test/` directory behind in the package.
 - `GenerateUniversalDockerfile` no longer returns an error it never produced.
-
-### Added
-- `docker.ssh_key` in `.godev.yaml`: the path of the key that downloads the project's private modules, with `~` expanded.
 
 ## [0.5.1] - 2026-09-19
 
@@ -142,7 +144,8 @@ Release notes with full commit lists are also published on the
 - First release of the `godev` CLI: lint, security analysis, tests, local infrastructure and Robot Framework E2E orchestration.
 - Shared E2E environment variables, `pg_isready` health check and seeds loaded through stdin.
 
-[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jmoyonero/godev/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/jmoyonero/godev/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jmoyonero/godev/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jmoyonero/godev/compare/v0.3.0...v0.4.0
