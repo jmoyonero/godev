@@ -9,6 +9,12 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-19
+
+### Fixed
+- `godev infra up`, `run` and `e2e` only wait for the infrastructure services they start. A project without WireMock no longer waits 5s for it on every start, and one without a database no longer retries `pg_isready` for 15s. `godev infra up db` waits only for the database.
+- The summary printed after `infra up` lists only the services that were started.
+
 ## [0.5.0] - 2026-09-19
 
 ### Fixed
@@ -118,7 +124,8 @@ Release notes with full commit lists are also published on the
 - First release of the `godev` CLI: lint, security analysis, tests, local infrastructure and Robot Framework E2E orchestration.
 - Shared E2E environment variables, `pg_isready` health check and seeds loaded through stdin.
 
-[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/jmoyonero/godev/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jmoyonero/godev/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jmoyonero/godev/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jmoyonero/godev/compare/v0.2.0...v0.3.0

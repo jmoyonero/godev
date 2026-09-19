@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jmoyonero/godev/pkg/execx/execxtest"
 )
@@ -135,4 +138,73 @@ func TestInfraResetDbCommand(t *testing.T) {
 		_, err := execute(t, "infra", "reset-db")
 		assertErrorContains(t, err, "error running psql seeds")
 	})
+}
+
+// closedPort returns a local TCP port with nothing listening on it.
+func closedPort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	return port
+}
+
+func TestInfraUpCommand_WaitsOnlyForStartedServices(t *testing.T) {
+	// WireMock points at a closed port: waiting for it would burn its full
+	// 5s timeout, so a fast run proves it was not probed.
+	const fast = 2 * time.Second
+	pgReady := composePrefix + "exec -T db pg_isready -U admin -d loaney_db"
+
+	cases := []struct {
+		name         string
+		services     string
+		args         []string
+		wantPgReady  bool
+		wantWireMock bool
+	}{
+		{name: "only the database", services: "[db]", wantPgReady: true},
+		{name: "no database", services: "[jaeger]"},
+		{name: "postgres alias", services: "[postgres]", wantPgReady: true},
+		{name: "services named on the command line", services: "[db, wiremock]", args: []string{"db"}, wantPgReady: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := setup(t)
+			writeFile(t, "docker-compose.yaml", "services: {}\n")
+			writeFile(t, ".godev.yaml", fmt.Sprintf("infra:\n  services: %s\n  wiremock_port: %d\n", tc.services, closedPort(t)))
+
+			start := time.Now()
+			if _, err := execute(t, append([]string{"infra", "up"}, tc.args...)...); err != nil {
+				t.Fatal(err)
+			}
+			if elapsed := time.Since(start); elapsed > fast {
+				t.Errorf("infra up took %s: it waited for a service that was not started", elapsed)
+			}
+			if _, ok := fake.Find(pgReady); ok != tc.wantPgReady {
+				t.Errorf("pg_isready run = %t, want %t: %q", ok, tc.wantPgReady, fake.Commands())
+			}
+		})
+	}
+}
+
+func TestEnabledServices(t *testing.T) {
+	cases := []struct {
+		name                  string
+		configured, requested []string
+		want                  map[string]bool
+	}{
+		{"defaults", nil, nil, map[string]bool{"db": true, "wiremock": true, "jaeger": true}},
+		{"configured", []string{"DB", "Grafana"}, nil, map[string]bool{"db": true, "grafana": true}},
+		{"requested wins", []string{"db", "wiremock"}, []string{"wiremock"}, map[string]bool{"wiremock": true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := enabledServices(tc.configured, tc.requested); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("enabledServices() = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

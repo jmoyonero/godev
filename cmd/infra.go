@@ -104,10 +104,8 @@ func startInfra(cfg *config.Config, services []string) (string, error) {
 
 	infra.TearDownManagedStack()
 
-	servicesMap := make(map[string]bool)
-	for _, s := range cfg.Infra.Services {
-		servicesMap[strings.ToLower(s)] = true
-	}
+	servicesMap := enabledServices(cfg.Infra.Services, services)
+	hasDB := servicesMap["db"] || servicesMap["postgres"] || servicesMap["postgresql"]
 	if servicesMap["grafana"] {
 		servicesMap["prometheus"] = true
 	}
@@ -144,10 +142,15 @@ func startInfra(cfg *config.Config, services []string) (string, error) {
 		return "", err
 	}
 
-	// Wait for the database and services to be available, if applicable
+	// Wait only for the services that were started: probing one that is not
+	// part of the stack just burns its whole timeout.
 	ui.Dim("Checking service availability...")
-	_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
-	_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
+	if hasDB {
+		_ = waitForPgReady(composeFile, cfg.Infra.DbService, cfg.Infra.DbUser, cfg.Infra.DbName, 15*time.Second)
+	}
+	if servicesMap["wiremock"] {
+		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/__admin", wiremockPort), 5*time.Second)
+	}
 
 	if servicesMap["prometheus"] {
 		_ = execx.WaitForURL(fmt.Sprintf("http://127.0.0.1:%d/-/ready", promPort), 5*time.Second)
@@ -158,11 +161,13 @@ func startInfra(cfg *config.Config, services []string) (string, error) {
 	}
 
 	ui.Success("Containers started and ready to use:")
-	ui.Info("  🗄️  PostgreSQL:     localhost:%d (database '%s')", dbPort, cfg.Infra.DbName)
-	if len(cfg.Infra.Services) == 0 || servicesMap["wiremock"] {
+	if hasDB {
+		ui.Info("  🗄️  PostgreSQL:     localhost:%d (database '%s')", dbPort, cfg.Infra.DbName)
+	}
+	if servicesMap["wiremock"] {
 		ui.Info("  🎭 WireMock:       http://localhost:%d", wiremockPort)
 	}
-	if len(cfg.Infra.Services) == 0 || servicesMap["jaeger"] || servicesMap["tracing"] {
+	if servicesMap["jaeger"] || servicesMap["tracing"] {
 		ui.Info("  🔍 Jaeger:         http://localhost:16686")
 	}
 	if servicesMap["otel-collector"] || servicesMap["collector"] {
@@ -175,6 +180,24 @@ func startInfra(cfg *config.Config, services []string) (string, error) {
 		ui.Info("  📈 Grafana:        http://localhost:%d", grafanaPort)
 	}
 	return composeFile, nil
+}
+
+// enabledServices returns the lowercased set of infrastructure services that
+// "up" starts: the ones requested on the command line, else infra.services,
+// else the same defaults the generated Compose file uses.
+func enabledServices(configured, requested []string) map[string]bool {
+	names := configured
+	if len(requested) > 0 {
+		names = requested
+	}
+	if len(names) == 0 {
+		names = []string{"db", "wiremock", "jaeger"}
+	}
+	enabled := make(map[string]bool, len(names))
+	for _, s := range names {
+		enabled[strings.ToLower(s)] = true
+	}
+	return enabled
 }
 
 // stopInfra stops this project's stack, also removing its volumes when asked.
