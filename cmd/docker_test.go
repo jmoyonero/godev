@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/base64"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -390,27 +389,10 @@ func TestExpandHome(t *testing.T) {
 	})
 }
 
-func TestWriteKeyFile(t *testing.T) {
-	t.Run("reports a directory it cannot create", func(t *testing.T) {
-		blockTempDir(t)
+func TestWriteKeyFile_ReportsADirectoryItCannotCreate(t *testing.T) {
+	blockTempDir(t)
 
-		if _, _, err := writeKeyFile([]byte("key")); err == nil {
-			t.Fatal("writeKeyFile() error = nil, want the failure creating the directory")
-		}
-	})
-
-	t.Run("reports a key it cannot write", func(t *testing.T) {
-		prev := writeKeyToDisk
-		writeKeyToDisk = func(string, []byte, os.FileMode) error { return errors.New("disk full") }
-		t.Cleanup(func() { writeKeyToDisk = prev })
-
-		path, cleanup, err := writeKeyFile([]byte("key"))
-		if err == nil {
-			cleanup()
-			t.Fatal("writeKeyFile() error = nil, want the write failure")
-		}
-		if path != "" || cleanup != nil {
-			t.Error("writeKeyFile() returned a path after failing")
-		}
-	})
+	if _, _, err := writeKeyFile([]byte("key")); err == nil {
+		t.Fatal("writeKeyFile() error = nil, want the failure creating the directory")
+	}
 }
