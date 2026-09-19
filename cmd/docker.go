@@ -175,11 +175,6 @@ func expandHome(path string) (string, error) {
 	return filepath.Join(home, strings.TrimPrefix(path[1:], "/")), nil
 }
 
-// writeKeyToDisk is os.WriteFile, replaceable in tests: a write into a
-// directory godev has just created cannot fail in practice, but the error is
-// still handled.
-var writeKeyToDisk = os.WriteFile
-
 // writeKeyFile stores the key in a private temporary directory for docker to
 // mount as a build secret, and returns the path along with its cleanup.
 func writeKeyFile(key []byte) (path string, cleanup func(), err error) {
@@ -190,7 +185,7 @@ func writeKeyFile(key []byte) (path string, cleanup func(), err error) {
 	cleanup = func() { _ = os.RemoveAll(dir) }
 
 	path = filepath.Join(dir, docker.SSHSecretID)
-	if err := writeKeyToDisk(path, key, 0600); err != nil {
+	if err := os.WriteFile(path, key, 0600); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("preparing the SSH key for the build: %w", err)
 	}

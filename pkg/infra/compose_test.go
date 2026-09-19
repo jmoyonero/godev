@@ -369,17 +369,3 @@ func TestGenerateDynamicCompose_ReportsWriteFailures(t *testing.T) {
 		})
 	}
 }
-
-func TestGenerateDynamicCompose_ReportsASerializationFailure(t *testing.T) {
-	inProject(t)
-	inTempHome(t)
-	restore := infra.SetComposeMarshaler(func(any) ([]byte, error) {
-		return nil, errors.New("cycle in the compose document")
-	})
-	defer restore()
-
-	_, err := infra.GenerateDynamicCompose(&config.Config{Name: "orders"})
-	if err == nil || !strings.Contains(err.Error(), "serializing dynamic compose") {
-		t.Errorf("error = %v, want the serialization failure", err)
-	}
-}

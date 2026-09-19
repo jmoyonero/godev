@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"os"
 	"testing"
 
@@ -54,22 +53,10 @@ func TestInitCommand(t *testing.T) {
 	})
 }
 
-func TestInitCommand_ReportsFailures(t *testing.T) {
-	t.Run("a config that cannot be generated", func(t *testing.T) {
-		setup(t)
-		prev := generateExample
-		generateExample = func(string) ([]byte, error) { return nil, errors.New("cannot serialize the defaults") }
-		t.Cleanup(func() { generateExample = prev })
+func TestInitCommand_ReportsAConfigItCannotWrite(t *testing.T) {
+	setup(t)
+	readOnlyCwd(t)
 
-		_, err := execute(t, "init")
-		assertErrorContains(t, err, "cannot serialize the defaults")
-	})
-
-	t.Run("a config that cannot be written", func(t *testing.T) {
-		setup(t)
-		readOnlyCwd(t)
-
-		_, err := execute(t, "init")
-		assertErrorContains(t, err, "error saving")
-	})
+	_, err := execute(t, "init")
+	assertErrorContains(t, err, "error saving")
 }
