@@ -139,7 +139,7 @@ func TestRunCommand_RunsUntilInterrupted(t *testing.T) {
 	}
 	freePort := []string{"docker ps --filter publish=18080 --format {{.ID}}\t{{.Names}}", "lsof -ti tcp:18080"}
 
-	want := []string{teardown, composePrefix + "up -d", composePrefix + "exec -T db pg_isready -U admin -d loaney_db"}
+	want := []string{teardown, composePrefix + "up -d", composePrefix + "exec -T db pg_isready -U postgres -d app_db"}
 	want = append(want, freePort...)
 	want = append(want, "go build -o "+bins[0]+" ./cmd/api", "go build -o "+bins[1]+" ./cmd/worker", bins[0], bins[1])
 	want = append(want, freePort...)

@@ -48,7 +48,7 @@ func TestInfraUpCommand(t *testing.T) {
 		assertCommands(t, fake,
 			"docker compose -p godev down -v --remove-orphans",
 			composePrefix+"up -d",
-			composePrefix+"exec -T db pg_isready -U admin -d loaney_db",
+			composePrefix+"exec -T db pg_isready -U postgres -d app_db",
 		)
 	})
 
@@ -110,7 +110,7 @@ func TestInfraResetDbCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		psql := composePrefix + "exec -T db psql -U admin -d loaney_db"
+		psql := composePrefix + "exec -T db psql -U postgres -d app_db"
 		c, ok := fake.Find(psql)
 		if !ok {
 			t.Fatalf("psql was not run: %q", fake.Commands())
@@ -156,7 +156,7 @@ func TestInfraUpCommand_WaitsOnlyForStartedServices(t *testing.T) {
 	// WireMock points at a closed port: waiting for it would burn its full
 	// 5s timeout, so a fast run proves it was not probed.
 	const fast = 2 * time.Second
-	pgReady := composePrefix + "exec -T db pg_isready -U admin -d loaney_db"
+	pgReady := composePrefix + "exec -T db pg_isready -U postgres -d app_db"
 
 	cases := []struct {
 		name         string

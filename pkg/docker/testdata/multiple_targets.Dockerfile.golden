@@ -3,25 +3,12 @@
 # ==============================================================================
 FROM golang:1.26.2-alpine AS builder
 
-ARG SSH_DEPLOY_KEY_B64=""
-ENV GOPRIVATE=github.com/jmoyonero/*
 WORKDIR /app
 
-RUN apk add --no-cache git openssh-client
+RUN apk add --no-cache git
 
 COPY go.mod go.sum ./
-RUN mkdir -p "$HOME/.ssh" && \
-    if [ -n "$SSH_DEPLOY_KEY_B64" ]; then \
-      printf '%s' "$SSH_DEPLOY_KEY_B64" | base64 -d > "$HOME/.ssh/id_ed25519" && \
-      chmod 600 "$HOME/.ssh/id_ed25519" && \
-      ssh-keyscan github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null && \
-      git config --global url."git@github.com:jmoyonero/".insteadOf "https://github.com/jmoyonero/"; \
-    fi && \
-    go mod download; \
-    STATUS=$?; \
-    rm -rf "$HOME/.ssh"; \
-    git config --global --unset-all url."git@github.com:jmoyonero/".insteadOf 2>/dev/null || true; \
-    exit $STATUS
+RUN go mod download
 
 COPY . .
 

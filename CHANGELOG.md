@@ -9,6 +9,11 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+### Changed
+- **Breaking.** The generated Dockerfile no longer hardcodes the maintainer's GitHub organization. `GOPRIVATE` and the SSH rewrite use the prefix in `docker.private_modules`, or the owner of the module declared in `go.mod` when it is not set. A project whose dependencies are all public gets a builder stage with no `GOPRIVATE`, no `openssh-client` and no `SSH_DEPLOY_KEY_B64`, and `build-image` no longer hands a key to Docker there.
+- **Breaking.** The local stack no longer defaults to the `loaney_db` database owned by `admin`: `db_name` defaults to `<name>_db` taken from `.godev.yaml` (`app_db` when the project has no name) and `db_user` to `postgres`. Projects relying on the old defaults must set `infra.db_name` and `infra.db_user` explicitly.
+- The database container runs in `UTC` instead of `Europe/Madrid`.
+
 ## [0.5.1] - 2026-09-19
 
 ### Fixed

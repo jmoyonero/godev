@@ -82,13 +82,49 @@ infra:
 		// Keys absent from the file keep their defaults.
 		{"Test.Path", cfg.Test.Path, "./..."},
 		{"Test.Format", cfg.Test.Format, DefaultTestFormat},
-		{"Infra.DbUser", cfg.Infra.DbUser, "admin"},
+		{"Infra.DbUser", cfg.Infra.DbUser, DefaultDbUser},
 		{"E2E.Type", cfg.E2E.Type, "robot"},
 	}
 	for _, c := range checks {
 		if !reflect.DeepEqual(c.got, c.want) {
 			t.Errorf("%s = %#v, want %#v", c.name, c.got, c.want)
 		}
+	}
+}
+
+func TestLoad_DbNameFollowsTheProjectName(t *testing.T) {
+	inTempDir(t)
+	writeFile(t, ".godev.yaml", "name: orders-api\n")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Infra.DbName != "orders_api_db" {
+		t.Errorf("Infra.DbName = %q, want %q", cfg.Infra.DbName, "orders_api_db")
+	}
+}
+
+func TestDbNameFor(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"", FallbackDbName},
+		{"orders-api", "orders_api_db"},
+		{"Orders API", "orders_api_db"},
+		{"orders--api", "orders_api_db"},
+		{"github.com/acme/orders", "github_com_acme_orders_db"},
+		{"payments_db", "payments_db"},
+		{"2fa-svc", "fa_svc_db"},
+		{"---", FallbackDbName},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DbNameFor(tt.name); got != tt.want {
+				t.Errorf("DbNameFor(%q) = %q, want %q", tt.name, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -246,6 +282,7 @@ func assertExample(t *testing.T, name, wantName string) {
 
 	want := DefaultConfig()
 	want.Name = wantName
+	want.Infra.DbName = DbNameFor(wantName)
 	// Empty maps and slices marshal as {} / [] and come back empty but non-nil,
 	// which DeepEqual would otherwise report as a difference.
 	got.E2E.Variables, want.E2E.Variables = nil, nil

@@ -35,9 +35,11 @@ func TestGenerateUniversalDockerfile_Golden(t *testing.T) {
 		name    string
 		goMod   string
 		cmdDirs []string
+		opts    Options
 	}{
-		{"multiple_targets", "module example.com/svc\n\ngo 1.26.2\n", []string{"api", "worker"}},
-		{"no_cmd_dir", "module example.com/svc\n\ngo 1.26.2\n", nil},
+		{"multiple_targets", "module example.com/svc\n\ngo 1.26.2\n", []string{"api", "worker"}, Options{}},
+		{"no_cmd_dir", "module example.com/svc\n\ngo 1.26.2\n", nil, Options{}},
+		{"private_modules", "module example.com/svc\n\ngo 1.26.2\n", []string{"api"}, Options{PrivateModulePrefix: "github.com/acme"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,7 +49,7 @@ func TestGenerateUniversalDockerfile_Golden(t *testing.T) {
 			}
 			inProject(t, tt.goMod, tt.cmdDirs...)
 
-			got, err := GenerateUniversalDockerfile()
+			got, err := GenerateUniversalDockerfile(tt.opts)
 			if err != nil {
 				t.Fatalf("GenerateUniversalDockerfile() error = %v", err)
 			}
@@ -71,7 +73,7 @@ func TestGenerateUniversalDockerfile_Golden(t *testing.T) {
 func TestGenerateUniversalDockerfile_Stages(t *testing.T) {
 	inProject(t, "module example.com/svc\n\ngo 1.26.2\n", "api", "worker")
 
-	got, err := GenerateUniversalDockerfile()
+	got, err := GenerateUniversalDockerfile(Options{})
 	if err != nil {
 		t.Fatalf("GenerateUniversalDockerfile() error = %v", err)
 	}
@@ -95,9 +97,60 @@ func TestGenerateUniversalDockerfile_Stages(t *testing.T) {
 		t.Errorf("found %d runtime stages but %d USER nonroot lines", stages, users)
 	}
 
+	// A project without private modules gets no credential handling at all.
+	for _, unwanted := range []string{"GOPRIVATE", "SSH_DEPLOY_KEY_B64", "openssh-client"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("Dockerfile mentions %q although the project has no private modules", unwanted)
+		}
+	}
+}
+
+func TestGenerateUniversalDockerfile_PrivateModules(t *testing.T) {
+	inProject(t, "module example.com/svc\n\ngo 1.26.2\n", "api")
+
+	got, err := GenerateUniversalDockerfile(Options{PrivateModulePrefix: "gitlab.com/acme"})
+	if err != nil {
+		t.Fatalf("GenerateUniversalDockerfile() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"ENV GOPRIVATE=gitlab.com/acme/*",
+		"ssh-keyscan gitlab.com >>",
+		`git config --global url."git@gitlab.com:acme/".insteadOf "https://gitlab.com/acme/"`,
+		`git config --global --unset-all url."git@gitlab.com:acme/".insteadOf`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Dockerfile is missing %q", want)
+		}
+	}
+
 	// The SSH deploy key must never survive the dependency download layer.
 	if !strings.Contains(got, `rm -rf "$HOME/.ssh"`) {
 		t.Error(`Dockerfile does not remove "$HOME/.ssh" after go mod download`)
+	}
+}
+
+func TestDetectPrivateModulePrefix(t *testing.T) {
+	tests := []struct {
+		name  string
+		goMod string
+		want  string
+	}{
+		{"no go.mod", "", ""},
+		{"repository path", "module github.com/acme/svc\n", "github.com/acme"},
+		{"nested path keeps host and owner", "module github.com/acme/group/svc\n", "github.com/acme"},
+		{"versioned path", "module github.com/acme/svc/v2\n", "github.com/acme"},
+		{"bare module name", "module myapp\n", ""},
+		{"host without owner", "module example.com/svc\n", ""},
+		{"no host", "module acme/svc\n", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inProject(t, tt.goMod)
+			if got := DetectPrivateModulePrefix(); got != tt.want {
+				t.Errorf("DetectPrivateModulePrefix() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -107,11 +160,11 @@ func TestDetectGoVersion(t *testing.T) {
 		goMod string
 		want  string
 	}{
-		{"no go.mod falls back", "", "1.27.1"},
+		{"no go.mod falls back", "", fallbackGoVersion},
 		{"patch version", "module m\n\ngo 1.26.2\n", "1.26.2"},
 		{"minor only", "module m\n\ngo 1.25\n", "1.25"},
 		{"indented with toolchain", "module m\n\n  go 1.26.0\ntoolchain go1.27.1\n", "1.26.0"},
-		{"no go directive falls back", "module m\n", "1.27.1"},
+		{"no go directive falls back", "module m\n", fallbackGoVersion},
 		{"ignores similarly prefixed lines", "module m\n\ngodebug default=go1.21\ngo 1.24.3\n", "1.24.3"},
 	}
 	for _, tt := range tests {

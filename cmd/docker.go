@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/docker"
 	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/ui"
@@ -25,7 +26,11 @@ var dockerfileCmd = &cobra.Command{
 	Use:   "dockerfile",
 	Short: "Generates the project's universal Dockerfile based on cmd/",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		content, err := docker.GenerateUniversalDockerfile()
+		opts, err := dockerfileOptions()
+		if err != nil {
+			return err
+		}
+		content, err := docker.GenerateUniversalDockerfile(opts)
 		if err != nil {
 			return err
 		}
@@ -48,7 +53,11 @@ var buildImageCmd = &cobra.Command{
 	Aliases: []string{"docker-build"},
 	Short:   "Builds the Docker image locally using the embedded universal Dockerfile",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		content, err := docker.GenerateUniversalDockerfile()
+		opts, err := dockerfileOptions()
+		if err != nil {
+			return err
+		}
+		content, err := docker.GenerateUniversalDockerfile(opts)
 		if err != nil {
 			return err
 		}
@@ -73,8 +82,13 @@ var buildImageCmd = &cobra.Command{
 			buildArgs = append(buildArgs, "--no-cache")
 		}
 
-		keyB64, source := resolveSSHDeployKey(sshKeyPath)
-		if keyB64 != "" {
+		// Without private modules the generated Dockerfile has no SSH support,
+		// so the key would only end up in the process list for nothing.
+		if opts.PrivateModulePrefix == "" {
+			if sshKeyPath != "" {
+				ui.Warn("Ignoring --ssh-key: this project declares no private modules (docker.private_modules in %s).", config.DefaultConfigFile)
+			}
+		} else if keyB64, source := resolveSSHDeployKey(sshKeyPath); keyB64 != "" {
 			ui.Info("🔑 SSH credential detected for private repositories (%s)", source)
 			buildArgs = append(buildArgs, "--build-arg", fmt.Sprintf("SSH_DEPLOY_KEY_B64=%s", keyB64))
 		}
@@ -88,6 +102,22 @@ var buildImageCmd = &cobra.Command{
 		ui.Success("Image '%s' built successfully.", buildTag)
 		return nil
 	},
+}
+
+// dockerfileOptions resolves how the project's Dockerfile must be generated:
+// the private module prefix comes from .godev.yaml, or from the module path in
+// go.mod when the file does not set one.
+func dockerfileOptions() (docker.Options, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return docker.Options{}, err
+	}
+
+	prefix := cfg.Docker.PrivateModules
+	if prefix == "" {
+		prefix = docker.DetectPrivateModulePrefix()
+	}
+	return docker.Options{PrivateModulePrefix: prefix}, nil
 }
 
 func resolveSSHDeployKey(explicitKeyPath string) (string, string) {
