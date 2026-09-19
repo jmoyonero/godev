@@ -285,6 +285,12 @@ The `seeds_file` and `wiremock_dir` paths are auto-detected when not set (`test/
 
 ---
 
+## 🤝 Contributing
+
+Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, the checks every pull request must pass and the commit conventions. Report security issues privately as described in [SECURITY.md](SECURITY.md). Notable changes are listed in the [CHANGELOG](CHANGELOG.md).
+
+---
+
 ## 👨‍💻 Author
 
 Created and maintained by **Jonathan Moyonero** ([@jmoyonero](https://github.com/jmoyonero)).
