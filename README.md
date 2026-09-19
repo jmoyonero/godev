@@ -1,13 +1,11 @@
-<p align="center">
-  <img src="assets/banner.png" alt="godev banner" width="100%" />
-</p>
-
-# godev 🛠️
-
 [![Go Version](https://img.shields.io/badge/go-1.27+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Release](https://img.shields.io/github/v/release/jmoyonero/godev?color=brightgreen)](https://github.com/jmoyonero/godev/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/jmoyonero/godev/actions/workflows/ci.yml/badge.svg)](https://github.com/jmoyonero/godev/actions/workflows/ci.yml)
+
+<p align="center">
+  <img src="assets/banner.png" alt="godev banner" width="100%" />
+</p>
 
 > **A unified CLI for Go and microservice development.**  
 > It standardizes code quality, SAST security analysis, known-vulnerability (CVE) checks, tests with race detection and coverage, code and mock generation, distroless Docker images, local infrastructure with Docker Compose and full E2E orchestration with Robot Framework.
