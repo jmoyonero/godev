@@ -178,7 +178,7 @@ If the repo has no `docker-compose.yaml`, `godev` generates one on the fly with 
 
 | Command | Description |
 | :--- | :--- |
-| `godev run [services...]`<br>*(aliases: `start`, `dev`)* | **Concurrent development runner:**<br>1. Brings up the infrastructure (destroying any other project's).<br>2. Concurrently builds the services declared in `e2e.services` of `.godev.yaml` (or those passed as arguments, e.g. `godev run api`).<br>3. Frees busy ports by stopping the container that publishes them instead of blindly killing processes.<br>4. Injects the merged environment variables (`e2e.env` + `svc.env`).<br>5. Streams each service's logs with colored, aligned prefixes.<br>6. Actively waits for the healthchecks to respond OK.<br>7. Stops the processes cleanly on `Ctrl+C`. |
+| `godev run [services...]`<br>*(aliases: `start`, `dev`)* | **Development runner:**<br>1. Brings up the infrastructure (destroying any other project's).<br>2. Frees busy ports by stopping the container that publishes them instead of blindly killing processes.<br>3. Builds the services declared in `e2e.services` of `.godev.yaml` (or those passed as arguments, e.g. `godev run api`) into a private temporary directory.<br>4. Starts them in the declared order with the merged environment variables (`e2e.env` + `svc.env`), waiting for each `health_url` before starting the next.<br>5. Streams each service's logs with colored, aligned prefixes.<br>6. Stops the processes cleanly on `Ctrl+C`, and exits with an error if a service crashes. |
 
 Options:
 ```bash

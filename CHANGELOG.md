@@ -9,6 +9,18 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+### Fixed
+- `godev run --reset-db` and `godev e2e` with seeds no longer tear down and restart the stack they had just brought up.
+- `godev run` exits with an error when a service crashes, instead of stopping everything with status 0.
+- Service binaries are built into a private temporary directory instead of fixed `/tmp/godev-*` paths, which did not exist on Windows.
+
+### Changed
+- `godev run` starts the services in the declared order and waits for each `health_url` before starting the next, like `godev e2e`, so a service can rely on those declared before it.
+- `godev run` checks the requested services exist before touching the infrastructure.
+
+### Project
+- Tests for `run` and `e2e`; `pkg/execx` gains `Start` for background processes, with a controllable fake in `execxtest`.
+
 ## [0.4.0] - 2026-09-19
 
 ### Fixed

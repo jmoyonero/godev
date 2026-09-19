@@ -3,6 +3,7 @@
 package execxtest
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"strings"
@@ -21,9 +22,13 @@ type Fake struct {
 	Handler func(c execx.Cmd) ([]byte, error)
 	// Installed lists the executables LookPath reports as present.
 	Installed map[string]bool
+	// OnStart is called with every process launched through Start, e.g. to
+	// make it exit at once. Returning an error makes Start fail instead.
+	OnStart func(p *Process) error
 
-	mu    sync.Mutex
-	calls []execx.Cmd
+	mu        sync.Mutex
+	calls     []execx.Cmd
+	processes []*Process
 }
 
 // Install replaces the execx runner with a new Fake for the duration of t.
@@ -44,6 +49,36 @@ func (f *Fake) Run(c execx.Cmd) error {
 // Output implements execx.Runner.
 func (f *Fake) Output(c execx.Cmd) ([]byte, error) {
 	return f.handle(c)
+}
+
+// Start implements execx.Runner. The command is recorded like any other, and
+// the returned process runs until killed, exited or ctx is canceled.
+func (f *Fake) Start(ctx context.Context, c execx.Cmd) (execx.Process, error) {
+	p := newProcess(ctx, c)
+
+	f.mu.Lock()
+	f.calls = append(f.calls, c)
+	onStart := f.OnStart
+	f.mu.Unlock()
+
+	if onStart != nil {
+		if err := onStart(p); err != nil {
+			p.stop(err)
+			return nil, err
+		}
+	}
+
+	f.mu.Lock()
+	f.processes = append(f.processes, p)
+	f.mu.Unlock()
+	return p, nil
+}
+
+// Processes returns the processes launched through Start, in order.
+func (f *Fake) Processes() []*Process {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*Process(nil), f.processes...)
 }
 
 // LookPath implements execx.Runner.

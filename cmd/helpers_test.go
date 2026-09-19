@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,6 +21,13 @@ import (
 // they live in package-level variables shared by every test.
 func execute(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return executeContext(t, context.Background(), args...)
+}
+
+// executeContext is execute with a context, which the long-running commands
+// treat like Ctrl+C when it is canceled.
+func executeContext(t *testing.T, ctx context.Context, args ...string) (string, error) {
+	t.Helper()
 
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
@@ -32,12 +40,12 @@ func execute(t *testing.T, args ...string) (string, error) {
 		resetFlags(rootCmd)
 	})
 
-	_, err := rootCmd.ExecuteC()
+	_, err := rootCmd.ExecuteContextC(ctx)
 	return out.String(), err
 }
 
 // resetFlags restores every flag of c and its subcommands to its default, and
-// undoes the SilenceUsage set by the root's PersistentPreRun.
+// undoes the SilenceUsage and context left behind by the previous run.
 func resetFlags(c *cobra.Command) {
 	reset := func(f *pflag.Flag) {
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
@@ -48,6 +56,8 @@ func resetFlags(c *cobra.Command) {
 		f.Changed = false
 	}
 	c.SilenceUsage = false
+	// cobra only hands the new context down to commands without one.
+	c.SetContext(nil) //nolint:staticcheck // nil is how cobra marks "no context yet"
 	c.Flags().VisitAll(reset)
 	c.PersistentFlags().VisitAll(reset)
 	for _, sub := range c.Commands() {
