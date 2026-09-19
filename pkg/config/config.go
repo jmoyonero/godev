@@ -170,7 +170,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load looks for .godev.yaml or .godev.yml in the current directory or upwards,
+// Load looks for .godev.yaml (or .godev.yml) in the current directory,
 // merging findings with default values.
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
