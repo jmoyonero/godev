@@ -40,6 +40,9 @@ type LintConfig struct {
 // instead of reporting findings.
 const DefaultGolangciVersion = "v2.13.2"
 
+// DefaultTestFormat is the gotestsum format used when none is configured.
+const DefaultTestFormat = "testname"
+
 type SecConfig struct {
 	ExcludeDirs []string `yaml:"exclude_dirs"`
 }
@@ -49,6 +52,9 @@ type TestConfig struct {
 	ExcludeDirs []string `yaml:"exclude_dirs"`
 	Race        bool     `yaml:"race"`
 	Shuffle     string   `yaml:"shuffle"`
+	// Format is the gotestsum output format (testname, pkgname, dots, testdox,
+	// pkgname-and-test-fails...). It only applies when gotestsum is installed.
+	Format string `yaml:"format"`
 }
 
 type InfraConfig struct {
@@ -158,6 +164,7 @@ func DefaultConfig() *Config {
 			ExcludeDirs: []string{},
 			Race:        true,
 			Shuffle:     "on",
+			Format:      DefaultTestFormat,
 		},
 		E2E: E2EConfig{
 			Enabled:      true,

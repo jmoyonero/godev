@@ -45,7 +45,7 @@ export PATH="$HOME/go/bin:$PATH"
 | `godev lint [--fix]` | Ejecuta `golangci-lint` con la versión fijada centralmente (soporta `--fix` para correcciones automáticas). |
 | `godev sec` | Ejecuta análisis estático de seguridad SAST con `gosec` (excluyendo automáticamente código generado o mocks). |
 | `godev vulncheck` | Escanea vulnerabilidades conocidas (CVEs) en las dependencias del proyecto con `govulncheck`. |
-| `godev test [--race] [--shuffle]` | Ejecuta tests unitarios en Go con flags configurables (`-race`, `-shuffle=on`). |
+| `godev test [--race] [--shuffle] [--format] [--plain]` | Ejecuta tests unitarios en Go con flags configurables (`-race`, `-shuffle=on`). Si [`gotestsum`](https://github.com/gotestyourself/gotestsum) está instalado (`go install gotest.tools/gotestsum@latest`) formatea la salida con colores y resumen de fallos; `--format` (o `test.format`) elige el formato (`testname` por defecto, `pkgname`, `dots`, `testdox`, `pkgname-and-test-fails`...). Sin gotestsum, o con `--plain`, usa `go test -v`. |
 
 ### 2. Infraestructura Local (Docker Compose)
 
@@ -117,6 +117,7 @@ test:
   path: "./internal/..."
   race: true
   shuffle: "on"
+  format: "testname"   # formato de gotestsum, si está instalado
 
 e2e:
   enabled: true
