@@ -114,7 +114,9 @@ func TestGenerateUniversalDockerfile_PrivateModules(t *testing.T) {
 	}
 
 	for _, want := range []string{
+		"# syntax=docker/dockerfile:1\n",
 		"ENV GOPRIVATE=gitlab.com/acme/*",
+		"RUN --mount=type=secret,id=" + SSHSecretID,
 		"ssh-keyscan gitlab.com >>",
 		`git config --global url."git@gitlab.com:acme/".insteadOf "https://gitlab.com/acme/"`,
 		`git config --global --unset-all url."git@gitlab.com:acme/".insteadOf`,
@@ -124,7 +126,18 @@ func TestGenerateUniversalDockerfile_PrivateModules(t *testing.T) {
 		}
 	}
 
-	// The SSH deploy key must never survive the dependency download layer.
+	// The syntax directive only works as the very first line.
+	if !strings.HasPrefix(got, "# syntax=") {
+		t.Error("the syntax directive is not the first line of the Dockerfile")
+	}
+
+	// The key must reach the build as a secret, never as a build argument that
+	// Docker would keep in the stage's metadata.
+	if strings.Contains(got, "ARG SSH_DEPLOY_KEY_B64") {
+		t.Error("Dockerfile still takes the deploy key as a build argument")
+	}
+
+	// Nothing the key leaves behind may survive the dependency download layer.
 	if !strings.Contains(got, `rm -rf "$HOME/.ssh"`) {
 		t.Error(`Dockerfile does not remove "$HOME/.ssh" after go mod download`)
 	}
