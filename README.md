@@ -25,6 +25,42 @@ When you have several Go microservices, copying and maintaining identical `Makef
 
 ---
 
+## 🔄 How It Works
+
+```mermaid
+flowchart TD
+    Dev["Developer / CI Workflow"] --> CLI["godev CLI"]
+
+    subgraph Quality["1. Quality, Linters & Security"]
+        CLI --> CMD_VERIFY["godev verify (Full Pipeline)"]
+        CLI --> CMD_LINT["godev lint (golangci-lint)"]
+        CLI --> CMD_SEC["godev sec (gosec SAST)"]
+        CLI --> CMD_VULN["godev vulncheck (govulncheck CVEs)"]
+        CLI --> CMD_TEST["godev test (gotestsum, race, coverage)"]
+    end
+
+    subgraph CodeGen["2. Code & Mock Generation"]
+        CLI --> CMD_GEN["godev generate (go generate + mockgen)"]
+    end
+
+    subgraph DockerBuild["3. Container Packaging"]
+        CLI --> CMD_DOCKER["godev dockerfile / build-image"]
+        CMD_DOCKER --> DISTROLESS["Universal Multi-Stage Distroless Image"]
+    end
+
+    subgraph LocalStack["4. Local Infrastructure & E2E Testing"]
+        CLI --> CMD_INFRA["godev infra (Docker Compose: DB, cache, queues)"]
+        CLI --> CMD_RUN["godev run (Service + local infra)"]
+        CLI --> CMD_E2E["godev e2e (Robot Framework orchestration)"]
+    end
+
+    Quality --> Out1["Unified Standards & Security Gates"]
+    DockerBuild --> Out2["Zero-Config Production Artifacts"]
+    LocalStack --> Out3["Reproducible Local & E2E Testing"]
+```
+
+---
+
 ## 🚀 Installation
 
 ### With `go install` (Recommended)
