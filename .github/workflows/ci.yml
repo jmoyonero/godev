@@ -6,6 +6,16 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  schedule:
+    # Weekly run so newly published CVEs are caught even without new commits.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -18,15 +28,60 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.27.x'
+          go-version-file: go.mod
           check-latest: true
           cache: true
 
       - name: Verify Dependencies
         run: go mod verify
 
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: Build Binary
         run: go build -v ./...
 
       - name: Run Unit Tests
         run: go test -v -race ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          # Keep in sync with config.DefaultGolangciVersion.
+          version: v2.13.2
+          # Build it with the project's Go toolchain: a prebuilt binary compiled
+          # with an older Go cannot type-check code targeting a newer one.
+          install-mode: goinstall
+
+  vulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

@@ -8,9 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+
 	"github.com/jmoyonero/godev/pkg/docker"
 	"github.com/jmoyonero/godev/pkg/ui"
-	"github.com/spf13/cobra"
 )
 
 var (

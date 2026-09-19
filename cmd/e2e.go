@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,10 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/ui"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -29,7 +31,7 @@ var e2eCmd = &cobra.Command{
 	Long: `Destroys the previous local infrastructure and brings up this project's, sets up the Python
 virtual environment, builds and starts the services in the background, waits for their healthchecks,
 runs Robot Framework and opens the report in Google Chrome.
-When done it destroys containers and processes, even when cancelled with Ctrl+C
+When done it destroys containers and processes, even when canceled with Ctrl+C
 (with --keep-infra the containers are kept to repeat runs).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
@@ -196,7 +198,7 @@ When done it destroys containers and processes, even when cancelled with Ctrl+C
 		}
 
 		if robotErr != nil {
-			return fmt.Errorf("Robot Framework E2E tests failed")
+			return errors.New("robot Framework E2E tests failed")
 		}
 
 		ui.Success("E2E suite completed successfully.")

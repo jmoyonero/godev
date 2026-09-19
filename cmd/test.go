@@ -7,10 +7,11 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/jmoyonero/godev/pkg/config"
 	"github.com/jmoyonero/godev/pkg/execx"
 	"github.com/jmoyonero/godev/pkg/ui"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -30,7 +31,7 @@ const gotestsumInstallHint = "go install gotest.tools/gotestsum@latest"
 var testCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Runs the Go unit tests",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		cfg, err := config.Load()
 		if err != nil {
 			return err
@@ -132,10 +133,10 @@ var testCmd = &cobra.Command{
 			ui.Dim("💡 Install gotestsum for colored output with a summary: %s", gotestsumInstallHint)
 		}
 
-		name, args := testCommand(useGotestsum, format, cmdArgs)
+		name, runArgs := testCommand(useGotestsum, format, cmdArgs)
 
 		ui.Step("🧪 Running unit tests (%s)...", path)
-		if err := execx.Run(name, args...); err != nil {
+		if err := execx.Run(name, runArgs...); err != nil {
 			return fmt.Errorf("unit tests failed: %w", err)
 		}
 
