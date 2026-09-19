@@ -14,7 +14,7 @@ var (
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Muestra la versión de godev",
+	Short: "Shows the godev version",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("godev %s (commit: %s, date: %s)\n", Version, Commit, Date)
 	},

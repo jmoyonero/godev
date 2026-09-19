@@ -24,28 +24,28 @@ var (
 var generateCmd = &cobra.Command{
 	Use:     "generate",
 	Aliases: []string{"gen", "mocks"},
-	Short:   "Ejecuta generadores de código (go generate) y genera mocks para interfaces (mockgen)",
-	Long: `Ejecuta 'go generate ./...' para generación de stubs/código declarativo (p. ej. OpenAPI / ogen)
-y analiza automáticamente todos los paquetes Go para generar los mocks de interfaces con mockgen en internal/mocks.`,
+	Short:   "Runs code generators (go generate) and generates mocks for interfaces (mockgen)",
+	Long: `Runs 'go generate ./...' to generate stubs/declarative code (e.g. OpenAPI / ogen)
+and automatically scans every Go package to generate interface mocks with mockgen in internal/mocks.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ui.Header("GENERACIÓN DE CÓDIGO Y MOCKS")
+		ui.Header("CODE AND MOCK GENERATION")
 
 		// 1. go generate ./...
 		if !genMocksOnly {
-			ui.Step("1. Ejecutando 'go generate ./...'...")
+			ui.Step("1. Running 'go generate ./...'...")
 			if err := execx.Run("go", "generate", "./..."); err != nil {
-				return fmt.Errorf("falló go generate: %w", err)
+				return fmt.Errorf("go generate failed: %w", err)
 			}
-			ui.Success("Generación con 'go generate' completada.")
+			ui.Success("'go generate' completed.")
 		}
 
 		// 2. Mock generation
 		if !genSkipMocks {
-			ui.Step("2. Detectando interfaces y generando mocks con mockgen...")
+			ui.Step("2. Detecting interfaces and generating mocks with mockgen...")
 			if err := generateMocks(); err != nil {
 				return err
 			}
-			ui.Success("Mocks generados y formateados exitosamente.")
+			ui.Success("Mocks generated and formatted successfully.")
 		}
 
 		return nil
@@ -53,33 +53,33 @@ y analiza automáticamente todos los paquetes Go para generar los mocks de inter
 }
 
 func generateMocks() error {
-	// Obtener nombre del módulo
+	// Get the module name
 	out, err := exec.Command("go", "list", "-m").Output()
 	if err != nil {
-		return fmt.Errorf("no se pudo determinar el módulo Go: %w", err)
+		return fmt.Errorf("could not determine the Go module: %w", err)
 	}
 	modulePath := strings.TrimSpace(string(out))
 
-	// Limpiar directorio de mocks existente
+	// Clean the existing mocks directory
 	mocksDir := "internal/mocks"
 	_ = os.RemoveAll(mocksDir)
 
-	// Listar paquetes del proyecto
+	// List the project's packages
 	pkgOut, err := exec.Command("go", "list", "./...").Output()
 	if err != nil {
-		return fmt.Errorf("error listando paquetes Go: %w", err)
+		return fmt.Errorf("error listing Go packages: %w", err)
 	}
 
 	packages := strings.Fields(string(pkgOut))
 	mockCount := 0
 
 	for _, pkg := range packages {
-		// Ignorar internal/mocks e internal/oas
+		// Skip internal/mocks and internal/oas
 		if strings.HasPrefix(pkg, modulePath+"/internal/mocks") || strings.HasPrefix(pkg, modulePath+"/internal/oas") {
 			continue
 		}
 
-		// Obtener directorio físico del paquete y nombre
+		// Get the package's physical directory and name
 		dirOut, err := exec.Command("go", "list", "-f", "{{.Dir}}:::{{.Name}}", pkg).Output()
 		if err != nil {
 			continue
@@ -90,15 +90,15 @@ func generateMocks() error {
 		}
 		pkgDir, pkgName := parts[0], parts[1]
 
-		// Limpiar posibles archivos mock_gen.go sueltos
+		// Clean up any stray mock_gen.go files
 		_ = os.Remove(filepath.Join(pkgDir, "mock_gen.go"))
 
-		// Calcular rutas relativas de salida
+		// Compute the relative output paths
 		relPkg := strings.TrimPrefix(pkg, modulePath+"/")
 		mockRelPkg := strings.TrimPrefix(relPkg, "internal/")
 		mockPkgName := pkgName + "mocks"
 
-		// Leer archivos .go del paquete
+		// Read the package's .go files
 		entries, err := os.ReadDir(pkgDir)
 		if err != nil {
 			continue
@@ -123,10 +123,10 @@ func generateMocks() error {
 			destFile := filepath.Join(mocksDir, mockRelPkg, fmt.Sprintf("%s_mock.go", sourceBase))
 
 			if err := os.MkdirAll(filepath.Dir(destFile), 0755); err != nil {
-				return fmt.Errorf("error creando directorio para %s: %w", destFile, err)
+				return fmt.Errorf("error creating directory for %s: %w", destFile, err)
 			}
 
-			ui.Dim("Generando mock: %s -> %s", strings.Join(interfaces, ", "), destFile)
+			ui.Dim("Generating mock: %s -> %s", strings.Join(interfaces, ", "), destFile)
 
 			mockgenArgs := []string{
 				"run", "go.uber.org/mock/mockgen",
@@ -140,7 +140,7 @@ func generateMocks() error {
 			var errBuf bytes.Buffer
 			cmd.Stderr = &errBuf
 			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("falló mockgen para %s: %s (%w)", destFile, errBuf.String(), err)
+				return fmt.Errorf("mockgen failed for %s: %s (%w)", destFile, errBuf.String(), err)
 			}
 
 			mockCount++
@@ -148,7 +148,7 @@ func generateMocks() error {
 	}
 
 	if mockCount > 0 {
-		ui.Dim("Formateando %d archivos mock con gofmt...", mockCount)
+		ui.Dim("Formatting %d mock files with gofmt...", mockCount)
 		_ = exec.Command("gofmt", "-w", mocksDir).Run()
 	}
 
@@ -185,7 +185,7 @@ func extractInterfaces(filePath string) ([]string, error) {
 }
 
 func init() {
-	generateCmd.Flags().BoolVar(&genMocksOnly, "mocks-only", false, "Genera solo los mocks, omitiendo 'go generate'")
-	generateCmd.Flags().BoolVar(&genSkipMocks, "skip-mocks", false, "Omite la generación de mocks")
+	generateCmd.Flags().BoolVar(&genMocksOnly, "mocks-only", false, "Generates only the mocks, skipping 'go generate'")
+	generateCmd.Flags().BoolVar(&genSkipMocks, "skip-mocks", false, "Skips mock generation")
 	rootCmd.AddCommand(generateCmd)
 }

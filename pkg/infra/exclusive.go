@@ -21,9 +21,9 @@ const ManagedProject = "godev"
 // must never block bringing up the stack the caller actually came here for. A truly
 // broken Docker will surface loudly on the "up" that follows.
 func TearDownManagedStack() {
-	ui.Step("🧹 Destruyendo la infraestructura local previa (proyecto '%s')...", ManagedProject)
+	ui.Step("🧹 Destroying the previous local infrastructure (project '%s')...", ManagedProject)
 	cmd := exec.Command("docker", "compose", "-p", ManagedProject, "down", "-v", "--remove-orphans")
 	if err := cmd.Run(); err != nil {
-		ui.Dim("No había infraestructura previa que destruir (o ya estaba abajo).")
+		ui.Dim("No previous infrastructure to destroy (or it was already down).")
 	}
 }

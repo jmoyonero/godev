@@ -106,11 +106,11 @@ func stopContainerOnPort(port int) bool {
 			continue
 		}
 		id, name := fields[0], fields[1]
-		ui.Dim("Liberando puerto %d (deteniendo contenedor '%s')...", port, name)
+		ui.Dim("Freeing port %d (stopping container '%s')...", port, name)
 		if err := exec.Command("docker", "stop", id).Run(); err == nil {
 			stoppedAny = true
 		} else {
-			ui.Warn("No se pudo detener el contenedor '%s' que ocupa el puerto %d.", name, port)
+			ui.Warn("Could not stop container '%s' holding port %d.", name, port)
 		}
 	}
 	return stoppedAny
@@ -130,10 +130,10 @@ func killBareProcessOnPort(port int) {
 			continue
 		}
 		if isContainerEngineProcess(pid) {
-			ui.Warn("El puerto %d lo mantiene el motor de contenedores (PID %d); no se toca para no tumbar Docker/OrbStack y todos sus proyectos.", port, pid)
+			ui.Warn("Port %d is held by the container engine (PID %d); leaving it alone so as not to bring down Docker/OrbStack and all its projects.", port, pid)
 			continue
 		}
-		ui.Dim("Liberando puerto %d (matando PID %d)...", port, pid)
+		ui.Dim("Freeing port %d (killing PID %d)...", port, pid)
 		_ = exec.Command("kill", "-9", strconv.Itoa(pid)).Run()
 	}
 }
@@ -170,7 +170,7 @@ func WaitForURL(urlStr string, timeout time.Duration) error {
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	return fmt.Errorf("timeout esperando que %s responda tras %s", urlStr, timeout)
+	return fmt.Errorf("timed out waiting for %s to respond after %s", urlStr, timeout)
 }
 
 // OpenBrowser opens a file or URL in the default browser (preferring Google Chrome on Mac)

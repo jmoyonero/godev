@@ -8,11 +8,11 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "godev",
-	Short: "godev - Herramienta CLI unificada para desarrollo en Go y microservicios",
-	Long: `godev estandariza la calidad de código, análisis de seguridad, linters,
-infraestructura local y orquestación de tests E2E (Robot Framework) en tus proyectos Go.
+	Short: "godev - A unified CLI for Go and microservice development",
+	Long: `godev standardizes code quality, security analysis, linters,
+local infrastructure and E2E test orchestration (Robot Framework) across your Go projects.
 
-Creado por @jmoyonero.`,
+Created by @jmoyonero.`,
 }
 
 func Execute() {
@@ -22,5 +22,5 @@ func Execute() {
 }
 
 func init() {
-	// Flags globales si se requieren en el futuro
+	// Global flags, should they be needed in the future
 }

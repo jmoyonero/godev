@@ -26,7 +26,7 @@ type E2EConfig struct {
 	ResultsDir   string            `yaml:"results_dir"`
 	OpenReport   bool              `yaml:"open_report"`
 	Variables    map[string]string `yaml:"variables"`
-	Env          map[string]string `yaml:"env"` // Variables compartidas para todos los servicios
+	Env          map[string]string `yaml:"env"` // Variables shared by every service
 	Services     []ServiceConfig   `yaml:"services"`
 }
 

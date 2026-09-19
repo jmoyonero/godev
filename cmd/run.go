@@ -33,34 +33,34 @@ var serviceColors = []*color.Color{
 }
 
 var runCmd = &cobra.Command{
-	Use:     "run [servicios...]",
+	Use:     "run [services...]",
 	Aliases: []string{"start", "dev"},
-	Short:   "Compila y arranca en desarrollo los servicios declarados en .godev.yaml",
-	Long: `Compila y levanta concurrentemente los servicios especificados (o todos los declarados en .godev.yaml),
-inyectando sus variables de entorno, comprobando sus healthchecks y canalizando sus logs con prefijos coloreados.
-Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiamente.`,
+	Short:   "Builds and starts the services declared in .godev.yaml for development",
+	Long: `Concurrently builds and starts the given services (or every one declared in .godev.yaml),
+injecting their environment variables, checking their healthchecks and streaming their logs with colored prefixes.
+On Ctrl+C, it stops every process and cleans up its resources gracefully.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
 			return err
 		}
 
-		ui.Header("SERVICIOS EN DESARROLLO (GODEV RUN)")
+		ui.Header("DEVELOPMENT SERVICES (GODEV RUN)")
 
-		// 1. Asegurar infraestructura (Postgres, etc.) arriba, deteniendo antes la de
-		//    cualquier otro proyecto de godev que siguiera levantada en esta máquina.
-		ui.Step("1. Levantando infraestructura...")
+		// 1. Make sure the infrastructure (Postgres, etc.) is up, first stopping that of
+		//    any other godev project still running on this machine.
+		ui.Step("1. Bringing up the infrastructure...")
 		if err := infraUpCmd.RunE(cmd, nil); err != nil {
-			return fmt.Errorf("falló levantar infraestructura: %w", err)
+			return fmt.Errorf("failed to bring up the infrastructure: %w", err)
 		}
 		if runResetDb && cfg.Infra.SeedsFile != "" && fileExists(cfg.Infra.SeedsFile) {
-			ui.Step("   Restaurando base de datos con seeds...")
+			ui.Step("   Restoring the database with seeds...")
 			if err := infraResetDbCmd.RunE(cmd, nil); err != nil {
-				return fmt.Errorf("falló la restauración de BBDD: %w", err)
+				return fmt.Errorf("database restore failed: %w", err)
 			}
 		}
 
-		// 2. Filtrar servicios a arrancar
+		// 2. Filter the services to start
 		servicesToRun := make([]config.ServiceConfig, 0)
 		if len(args) > 0 {
 			filterMap := make(map[string]bool)
@@ -73,17 +73,17 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 				}
 			}
 			if len(servicesToRun) == 0 {
-				return fmt.Errorf("ninguno de los servicios especificados (%v) se encontró en la configuración", args)
+				return fmt.Errorf("none of the given services (%v) was found in the configuration", args)
 			}
 		} else {
 			servicesToRun = cfg.E2E.Services
 		}
 
 		if len(servicesToRun) == 0 {
-			return fmt.Errorf("no hay servicios configurados en el bloque e2e.services de .godev.yaml")
+			return fmt.Errorf("no services configured in the e2e.services block of .godev.yaml")
 		}
 
-		// 3. Preparar contexto cancelable para procesos background
+		// 3. Prepare a cancellable context for background processes
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -91,11 +91,11 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-sigChan
-			ui.Warn("\nInterrupción detectada. Deteniendo servicios...")
+			ui.Warn("\nInterrupt detected. Stopping services...")
 			cancel()
 		}()
 
-		// 4. Compilar y preparar binarios temporales
+		// 4. Build and prepare the temporary binaries
 		tempBinaries := make([]string, 0)
 		startedCmds := make([]*exec.Cmd, 0)
 
@@ -127,9 +127,9 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 			tempBinaries = append(tempBinaries, binName)
 			binPaths[svc.Name] = binName
 
-			ui.Step("🔨 Compilando '%s' (%s)...", svc.Name, svc.Cmd)
+			ui.Step("🔨 Building '%s' (%s)...", svc.Name, svc.Cmd)
 			if err := execx.Run("go", "build", "-o", binName, svc.Cmd); err != nil {
-				return fmt.Errorf("falló la compilación del servicio %s: %w", svc.Name, err)
+				return fmt.Errorf("build of service %s failed: %w", svc.Name, err)
 			}
 		}
 
@@ -141,7 +141,7 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 		}
 		prefixWidth := maxLen + 2
 
-		ui.Step("🚀 Iniciando servicios...")
+		ui.Step("🚀 Starting services...")
 		var wg sync.WaitGroup
 		for i, svc := range servicesToRun {
 			cColor := serviceColors[i%len(serviceColors)]
@@ -172,7 +172,7 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 			}
 
 			if err := c.Start(); err != nil {
-				return fmt.Errorf("error iniciando %s: %w", svc.Name, err)
+				return fmt.Errorf("error starting %s: %w", svc.Name, err)
 			}
 			startedCmds = append(startedCmds, c)
 
@@ -194,18 +194,18 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 			}(stderr, paddedPrefix, cColor)
 		}
 
-		// 5. Esperar healthchecks
+		// 5. Wait for healthchecks
 		for _, svc := range servicesToRun {
 			if svc.HealthURL != "" {
-				ui.Dim("Esperando healthcheck de %s en %s...", svc.Name, svc.HealthURL)
+				ui.Dim("Waiting for %s healthcheck at %s...", svc.Name, svc.HealthURL)
 				if err := execx.WaitForURL(svc.HealthURL, 15*time.Second); err != nil {
-					return fmt.Errorf("el servicio %s no respondió al healthcheck tras 15s: %w", svc.Name, err)
+					return fmt.Errorf("service %s did not respond to the healthcheck after 15s: %w", svc.Name, err)
 				}
-				ui.Success("Servicio '%s' listo y respondiendo en %s", svc.Name, svc.HealthURL)
+				ui.Success("Service '%s' ready and responding at %s", svc.Name, svc.HealthURL)
 			}
 		}
 
-		ui.Success("Todos los servicios están en ejecución. Pulsa Ctrl+C para detenerlos.\n")
+		ui.Success("All services are running. Press Ctrl+C to stop them.\n")
 
 		waitChan := make(chan error, len(startedCmds))
 		for _, c := range startedCmds {
@@ -216,10 +216,10 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 
 		select {
 		case <-ctx.Done():
-			ui.Info("Apagando servicios limpiamente...")
+			ui.Info("Shutting down services gracefully...")
 		case err := <-waitChan:
 			if ctx.Err() == nil && err != nil {
-				ui.Warn("Un servicio finalizó inesperadamente: %v", err)
+				ui.Warn("A service exited unexpectedly: %v", err)
 			}
 		}
 
@@ -228,6 +228,6 @@ Al presionar Ctrl+C, detiene todos los procesos y limpia los recursos limpiament
 }
 
 func init() {
-	runCmd.Flags().BoolVarP(&runResetDb, "reset-db", "r", false, "Restaura la base de datos aplicando seeds.sql antes de iniciar")
+	runCmd.Flags().BoolVarP(&runResetDb, "reset-db", "r", false, "Restores the database by applying seeds.sql before starting")
 	rootCmd.AddCommand(runCmd)
 }
