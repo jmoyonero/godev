@@ -73,12 +73,13 @@ godev run --reset-db  # Aplica seeds.sql en la base de datos antes de arrancar
 
 | Comando | Descripción |
 | :--- | :--- |
-| `godev e2e` (o `godev robot`) | **Orquestador inteligente E2E:**<br>1. Restaura base de datos con seeds.<br>2. Crea y configura el virtualenv de Python (`.venv`) e instala `requirements.txt` si no existe.<br>3. Libera puertos en uso.<br>4. Compila y arranca en background los servicios necesarios con sus variables de entorno.<br>5. Espera con healthcheck polling activo.<br>6. Ejecuta Robot Framework.<br>7. Abre automáticamente el reporte HTML en Google Chrome.<br>8. Garantiza el apagado y limpieza de procesos y binarios al terminar o al recibir Ctrl+C. |
+| `godev e2e` (o `godev robot`) | **Orquestador inteligente E2E:**<br>1. Levanta la infraestructura (Docker Compose) si no estaba corriendo.<br>2. Restaura base de datos con seeds.<br>3. Crea y configura el virtualenv de Python (`.venv`) e instala `requirements.txt` si no existe.<br>4. Libera puertos en uso.<br>5. Compila y arranca en background los servicios necesarios con sus variables de entorno.<br>6. Espera con healthcheck polling activo.<br>7. Ejecuta Robot Framework.<br>8. Abre automáticamente el reporte HTML en Google Chrome.<br>9. Garantiza el apagado y limpieza de procesos y binarios al terminar o al recibir Ctrl+C, y apaga la infraestructura que él mismo levantó (la que ya estaba arriba se deja como estaba). |
 
 Opciones adicionales:
 ```bash
 godev e2e --no-browser    # No abre el reporte en el navegador
-godev e2e --stop-infra    # Destruye los contenedores (-v) al terminar
+godev e2e --stop-infra    # Destruye los contenedores (-v) al terminar, aunque ya estuvieran levantados
+godev e2e --keep-infra    # No apaga la infraestructura que levantó e2e (para repetir ejecuciones)
 godev e2e --suite ruta/   # Ejecuta una suite específica
 ```
 
