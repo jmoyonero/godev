@@ -9,24 +9,25 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
-### Added
-- Unit tests for `pkg/config` and `pkg/docker`, with golden files for the generated Dockerfile.
-- Unit tests for every command except `run` and `e2e`, backed by a fake process runner (`pkg/execx/execxtest`).
-- CI runs `golangci-lint` and `govulncheck`, and Build & Test on both Linux and macOS.
-- Dependabot for Go modules and GitHub Actions.
-- `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates.
+## [0.4.0] - 2026-09-19
+
+### Fixed
+- `godev test --race=false` and `test.race: false` now disable the race detector; before, the flag's default always turned it back on.
+- `test.shuffle` from `.godev.yaml` is honored; before, the `--shuffle` default always overrode it.
+- `godev infra reset-db` checks the seeds file exists before tearing down and restarting the stack.
 
 ### Changed
 - A failing command (linter findings, red tests, a missing file...) prints only the error; the usage help is shown for usage mistakes such as an unknown flag.
-
-### Fixed
-- `godev infra reset-db` checks the seeds file exists before tearing down and restarting the stack.
-- `godev test --race=false` and `test.race: false` now disable the race detector; before, the flag's default always turned it back on.
-- `test.shuffle` from `.godev.yaml` is honored; before, the `--shuffle` default always overrode it.
-- `godev test` no longer shadows the command arguments.
+- `godev generate` reports mockgen failures as `<error>: <stderr>`.
 
 ### Security
 - Bump `golang.org/x/sys` to v0.44.0 (GO-2026-5024).
+
+### Project
+- Unit tests for `pkg/config`, `pkg/docker`, `pkg/execx` and every command except `run` and `e2e`, backed by a fake process runner (`pkg/execx/execxtest`).
+- CI runs `golangci-lint` and `govulncheck`, and Build & Test on both Linux and macOS.
+- Dependabot for Go modules and GitHub Actions.
+- `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates.
 
 ## [0.3.0] - 2026-09-19
 
@@ -103,7 +104,8 @@ Release notes with full commit lists are also published on the
 - First release of the `godev` CLI: lint, security analysis, tests, local infrastructure and Robot Framework E2E orchestration.
 - Shared E2E environment variables, `pg_isready` health check and seeds loaded through stdin.
 
-[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jmoyonero/godev/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jmoyonero/godev/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jmoyonero/godev/compare/v0.1.7...v0.2.0
 [0.1.7]: https://github.com/jmoyonero/godev/compare/v0.1.6...v0.1.7
