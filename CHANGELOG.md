@@ -9,6 +9,8 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-20
+
 ### Removed
 - **Breaking.** `infra.project_name` in `.godev.yaml`. It never grouped the containers — every command launches the stack with `-p godev` — and only renamed the generated compose file in the temp directory, which is now always derived from `name` (or the directory). Remove the key: an unknown field is ignored, so nothing breaks either way.
 
@@ -151,7 +153,8 @@ Release notes with full commit lists are also published on the
 - First release of the `godev` CLI: lint, security analysis, tests, local infrastructure and Robot Framework E2E orchestration.
 - Shared E2E environment variables, `pg_isready` health check and seeds loaded through stdin.
 
-[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jmoyonero/godev/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jmoyonero/godev/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jmoyonero/godev/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/jmoyonero/godev/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jmoyonero/godev/compare/v0.4.0...v0.5.0
