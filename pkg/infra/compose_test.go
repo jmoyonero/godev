@@ -50,7 +50,6 @@ func TestGenerateDynamicCompose_Observability(t *testing.T) {
 	cfg := &config.Config{
 		Name: "test-service",
 		Infra: config.InfraConfig{
-			ProjectName:  "testproj",
 			Services:     []string{"db", "wiremock", "jaeger", "prometheus", "grafana"},
 			WireMockPort: 8090,
 			DbPort:       5432,
@@ -200,7 +199,6 @@ func TestGenerateDynamicCompose_NamesTheProject(t *testing.T) {
 		cfg  *config.Config
 		want string
 	}{
-		{"explicit project name", &config.Config{Name: "orders-api", Infra: config.InfraConfig{ProjectName: "chosen"}}, "chosen"},
 		{"the -api suffix is dropped", &config.Config{Name: "orders-api"}, "orders"},
 		{"the -service suffix is dropped", &config.Config{Name: "orders-service"}, "orders"},
 		{"the -daemon suffix is dropped", &config.Config{Name: "orders-daemon"}, "orders"},

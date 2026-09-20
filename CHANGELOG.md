@@ -9,6 +9,13 @@ Release notes with full commit lists are also published on the
 
 ## [Unreleased]
 
+### Removed
+- **Breaking.** `infra.project_name` in `.godev.yaml`. It never grouped the containers — every command launches the stack with `-p godev` — and only renamed the generated compose file in the temp directory, which is now always derived from `name` (or the directory). Remove the key: an unknown field is ignored, so nothing breaks either way.
+
+### Fixed
+- The README no longer claims `godev e2e` opens the report in Google Chrome on every platform: Chrome is preferred on macOS, and the default browser is used on Linux and Windows.
+- The README no longer claims `godev init` writes every default value: the optional `docker` section is omitted, and the command table now says so.
+
 ## [0.6.0] - 2026-09-20
 
 ### Added
@@ -16,7 +23,7 @@ Release notes with full commit lists are also published on the
 
 ### Changed
 - **Breaking.** The generated Dockerfile no longer hardcodes the maintainer's GitHub organization. `GOPRIVATE` and the SSH rewrite use the prefix in `docker.private_modules`, or the owner of the module declared in `go.mod` when it is not set. A project whose dependencies are all public gets a builder stage with no `GOPRIVATE`, no `openssh-client` and no `SSH_DEPLOY_KEY_B64`, and `build-image` no longer hands a key to Docker there.
-- **Breaking.** The local stack no longer defaults to the `loaney_db` database owned by `admin`: `db_name` defaults to `<name>_db` taken from `.godev.yaml` (`app_db` when the project has no name) and `db_user` to `postgres`. Projects relying on the old defaults must set `infra.db_name` and `infra.db_user` explicitly.
+- **Breaking.** The local stack no longer defaults to a hardcoded database name owned by `admin`: `db_name` defaults to `<name>_db` taken from `.godev.yaml` (`app_db` when the project has no name) and `db_user` to `postgres`. Projects relying on the old defaults must set `infra.db_name` and `infra.db_user` explicitly.
 - The database container runs in `UTC` instead of `Europe/Madrid`.
 - **Breaking.** `build-image` hands the SSH deploy key to Docker as a BuildKit secret mounted on the `go mod download` layer, instead of the `SSH_DEPLOY_KEY_B64` build argument, so it no longer appears in the build metadata or in the machine's process list. Building a project with private modules now requires BuildKit, the default since Docker 23.
 - **Breaking.** The deploy key is never taken from `~/.ssh` implicitly. It comes from `--ssh-key`, from the new `docker.ssh_key` option or from `SSH_DEPLOY_KEY_B64` / `SSH_DEPLOY_KEY`, and an unreadable path is now an error instead of a silent fallback.

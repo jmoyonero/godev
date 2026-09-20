@@ -70,16 +70,18 @@ func ResolveComposeFile(cfg *config.Config) (string, error) {
 
 // GenerateDynamicCompose creates a standard docker-compose.yaml in the OS temp directory.
 func GenerateDynamicCompose(cfg *config.Config) (string, error) {
-	projectName := cfg.Infra.ProjectName
-	if projectName == "" {
-		if cfg.Name != "" {
-			projectName = strings.TrimSuffix(cfg.Name, "-api")
-			projectName = strings.TrimSuffix(projectName, "-service")
-			projectName = strings.TrimSuffix(projectName, "-daemon")
-		} else {
-			cwd, _ := os.Getwd()
-			projectName = strings.TrimSuffix(filepath.Base(cwd), "-api")
-		}
+	// Only names the generated file and its "name:" field: every command launches
+	// the stack with -p ManagedProject, which is what actually groups the
+	// containers. Keeping it derived from the repo means two projects never write
+	// over each other's generated compose file in the temp directory.
+	var projectName string
+	if cfg.Name != "" {
+		projectName = strings.TrimSuffix(cfg.Name, "-api")
+		projectName = strings.TrimSuffix(projectName, "-service")
+		projectName = strings.TrimSuffix(projectName, "-daemon")
+	} else {
+		cwd, _ := os.Getwd()
+		projectName = strings.TrimSuffix(filepath.Base(cwd), "-api")
 	}
 
 	compose := ComposeConfig{
