@@ -84,7 +84,7 @@ godev version
 
 Releases are built by [GoReleaser](https://goreleaser.com) from `.goreleaser.yaml`, which injects the version, commit and build date into the binary. Pushing a `v*` tag triggers the `Release` workflow:
 ```bash
-git tag v0.3.0 && git push origin v0.3.0
+git tag v0.7.0 && git push origin v0.7.0
 ```
 To test the release locally without publishing: `go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean`.
 
@@ -193,7 +193,7 @@ godev run --reset-db  # Applies seeds.sql to the database before starting (-r)
 
 | Command | Description |
 | :--- | :--- |
-| `godev e2e` (or `godev robot`) | **Smart E2E orchestrator:**<br>1. Destroys the previous local infrastructure (whichever project it belonged to) and brings up this one's.<br>2. Restores the database with seeds if the repo defines them.<br>3. Creates and sets up the Python virtualenv (`.venv`) and installs `requirements.txt` if it does not exist.<br>4. Frees ports in use.<br>5. Builds and starts the required services in the background with their environment variables.<br>6. Waits with active healthcheck polling.<br>7. Runs Robot Framework.<br>8. Automatically opens the HTML report in Google Chrome.<br>9. Destroys containers, processes and binaries at the end, whether the tests pass or fail, or on Ctrl+C (except the containers with `--keep-infra`). |
+| `godev e2e` (or `godev robot`) | **Smart E2E orchestrator:**<br>1. Destroys the previous local infrastructure (whichever project it belonged to) and brings up this one's.<br>2. Restores the database with seeds if the repo defines them.<br>3. Creates and sets up the Python virtualenv (`.venv`) and installs `requirements.txt` if it does not exist.<br>4. Frees ports in use.<br>5. Builds and starts the required services in the background with their environment variables.<br>6. Waits with active healthcheck polling.<br>7. Runs Robot Framework.<br>8. Automatically opens the HTML report in the browser (Google Chrome when it is installed on macOS, the default browser elsewhere).<br>9. Destroys containers, processes and binaries at the end, whether the tests pass or fail, or on Ctrl+C (except the containers with `--keep-infra`). |
 
 Additional options:
 ```bash
@@ -206,7 +206,7 @@ godev e2e --suite path/   # Runs a specific suite
 
 | Command | Description |
 | :--- | :--- |
-| `godev init [name]` | Generates a `.godev.yaml` configuration template in the current directory with every default value. |
+| `godev init [name]` | Generates a `.godev.yaml` configuration template in the current directory with the defaults of every section it needs. The optional `docker` section is not written out: add it by hand when the project has private modules. |
 | `godev version` | Shows the installed version of `godev`. |
 
 ---

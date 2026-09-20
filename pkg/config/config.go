@@ -126,7 +126,6 @@ type DockerConfig struct {
 
 type InfraConfig struct {
 	ComposeFile    string   `yaml:"compose_file,omitempty"`
-	ProjectName    string   `yaml:"project_name,omitempty"`
 	Services       []string `yaml:"services,omitempty"`
 	SeedsFile      string   `yaml:"seeds_file,omitempty"`
 	WireMockDir    string   `yaml:"wiremock_dir,omitempty"`
@@ -188,7 +187,6 @@ func DefaultConfig() *Config {
 		Name: "",
 		Infra: InfraConfig{
 			ComposeFile:    "",
-			ProjectName:    "",
 			Services:       []string{"db", "wiremock", "jaeger"},
 			SeedsFile:      detectSeedsFile(),
 			WireMockDir:    detectWireMockDir(),
